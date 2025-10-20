@@ -156,270 +156,6 @@ def duration_str(delta, level='dasa'):
             return "Less than 1 day"
         return f"{years}y {months}m {days}d"
 
-def create_south_indian_chart(house_planets, lagna_sign, chart_type='Rasi'):
-    """Create South Indian style chart using Streamlit columns"""
-    st.markdown(f"<h4 style='text-align: center; color: #125336; margin-bottom: 20px;'>{chart_type} Chart - South Indian Style</h4>", unsafe_allow_html=True)
-    
-    # In South Indian style, houses are FIXED in position
-    # Signs rotate based on lagna
-    # Layout:
-    #  12  1  2  3
-    #  11  |  |  4
-    #  10  |  |  5
-    #   9  8  7  6
-    
-    sign_positions = {
-        'Aries': 0, 'Taurus': 1, 'Gemini': 2, 'Cancer': 3,
-        'Leo': 4, 'Virgo': 5, 'Libra': 6, 'Scorpio': 7,
-        'Sagittarius': 8, 'Capricorn': 9, 'Aquarius': 10, 'Pisces': 11
-    }
-    
-    lagna_idx = sign_positions[lagna_sign]
-    
-    # Create container with border
-    st.markdown("""
-    <style>
-    .si-container {
-        border: 3px solid #125336;
-        padding: 0;
-        background: white;
-        max-width: 600px;
-        margin: 0 auto;
-    }
-    .si-row {
-        display: flex;
-        width: 100%;
-    }
-    .si-cell {
-        flex: 1;
-        border: 1px solid #125336;
-        padding: 10px;
-        min-height: 120px;
-        position: relative;
-        background: white;
-    }
-    .si-center {
-        background: #f8f9fa;
-        border-left: 2px solid #125336;
-        border-right: 2px solid #125336;
-    }
-    .si-house-num {
-        position: absolute;
-        top: 3px;
-        left: 5px;
-        font-size: 10px;
-        color: #666;
-        font-weight: bold;
-    }
-    .si-sign-name {
-        position: absolute;
-        top: 3px;
-        right: 5px;
-        font-size: 9px;
-        color: #888;
-    }
-    .si-planets {
-        margin-top: 25px;
-        text-align: center;
-        color: #125336;
-        font-size: 11px;
-        font-weight: 500;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    layout = [
-        [12, 1, 2, 3],
-        [11, 'X', 'X', 4],
-        [10, 'X', 'X', 5],
-        [9, 8, 7, 6]
-    ]
-    
-    chart_html = '<div class="si-container">'
-    
-    for row_idx, row in enumerate(layout):
-        chart_html += '<div class="si-row">'
-        for col_idx, house_num in enumerate(row):
-            if house_num == 'X':
-                # Center cells with just borders
-                chart_html += '<div class="si-cell si-center"></div>'
-            else:
-                # Calculate which sign is in this house
-                sign_idx = (lagna_idx + house_num - 1) % 12
-                sign = sign_names[sign_idx]
-                
-                # Get planets in this house
-                planets = house_planets.get(house_num, [])
-                planet_text = '<br>'.join(planets) if planets else 'Empty'
-                
-                chart_html += f'''
-                <div class="si-cell">
-                    <span class="si-house-num">{house_num}</span>
-                    <span class="si-sign-name">{sign}</span>
-                    <div class="si-planets">{planet_text}</div>
-                </div>
-                '''
-        chart_html += '</div>'
-    
-    chart_html += '</div>'
-    
-    st.markdown(chart_html, unsafe_allow_html=True)
-
-def create_north_indian_chart(house_planets, lagna_sign, chart_type='Rasi'):
-    """Create North Indian style chart with diagonal lines"""
-    st.markdown(f"<h4 style='text-align: center; color: #125336; margin-bottom: 20px;'>{chart_type} Chart - North Indian Style</h4>", unsafe_allow_html=True)
-    
-    # In North Indian chart, SIGNS are fixed in position
-    # Houses rotate based on which sign is the lagna
-    
-    sign_positions = {
-        'Aries': 0, 'Taurus': 1, 'Gemini': 2, 'Cancer': 3,
-        'Leo': 4, 'Virgo': 5, 'Libra': 6, 'Scorpio': 7,
-        'Sagittarius': 8, 'Capricorn': 9, 'Aquarius': 10, 'Pisces': 11
-    }
-    
-    lagna_idx = sign_positions[lagna_sign]
-    
-    # North Indian diamond layout
-    # Signs in fixed positions (clockwise from top):
-    # Cancer, Leo, Virgo, Libra, Scorpio, Sagittarius, Capricorn, Aquarius, Pisces, Aries, Taurus, Gemini
-    # Positions: Top, Top-Right, Right, Right-Bottom, Bottom, Bottom-Left, Left, Left-Top, and 4 corners
-    
-    st.markdown("""
-    <style>
-    .ni-container {
-        width: 500px;
-        height: 500px;
-        margin: 0 auto;
-        position: relative;
-        background: white;
-    }
-    .ni-diamond {
-        width: 100%;
-        height: 100%;
-        position: relative;
-        transform: rotate(0deg);
-    }
-    /* Main square border */
-    .ni-square {
-        position: absolute;
-        width: 350px;
-        height: 350px;
-        border: 3px solid #125336;
-        top: 75px;
-        left: 75px;
-        transform: rotate(45deg);
-        background: white;
-    }
-    /* Diagonal lines */
-    .ni-line-v {
-        position: absolute;
-        width: 2px;
-        height: 247px;
-        background: #125336;
-        top: 126px;
-        left: 249px;
-    }
-    .ni-line-h {
-        position: absolute;
-        width: 247px;
-        height: 2px;
-        background: #125336;
-        top: 249px;
-        left: 126px;
-    }
-    /* House positions */
-    .ni-house {
-        position: absolute;
-        padding: 5px;
-        font-size: 10px;
-        text-align: center;
-        color: #125336;
-    }
-    .ni-house-num {
-        font-weight: bold;
-        font-size: 9px;
-        color: #666;
-    }
-    .ni-sign {
-        font-size: 8px;
-        color: #888;
-        margin-bottom: 3px;
-    }
-    .ni-planets {
-        font-size: 9px;
-        color: #125336;
-        font-weight: 500;
-        margin-top: 3px;
-    }
-    /* Specific house positions in diamond */
-    .pos-top { top: 10px; left: 220px; width: 60px; }
-    .pos-top-right { top: 50px; right: 80px; width: 70px; }
-    .pos-right { top: 220px; right: 10px; width: 60px; }
-    .pos-bottom-right { bottom: 80px; right: 50px; width: 70px; }
-    .pos-bottom { bottom: 10px; left: 220px; width: 60px; }
-    .pos-bottom-left { bottom: 80px; left: 50px; width: 70px; }
-    .pos-left { top: 220px; left: 10px; width: 60px; }
-    .pos-top-left { top: 50px; left: 80px; width: 70px; }
-    .pos-top-inner { top: 100px; left: 195px; width: 110px; }
-    .pos-right-inner { top: 195px; right: 100px; width: 110px; }
-    .pos-bottom-inner { bottom: 100px; left: 195px; width: 110px; }
-    .pos-left-inner { top: 195px; left: 100px; width: 110px; }
-    .pos-center { top: 210px; left: 210px; width: 80px; background: #f0f7f4; border: 1px solid #125336; border-radius: 5px; font-weight: bold; }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    # Fixed sign positions in North Indian chart (12 positions around diamond)
-    sign_position_map = [
-        ('Cancer', 'pos-top'),
-        ('Leo', 'pos-top-right'), 
-        ('Virgo', 'pos-right'),
-        ('Libra', 'pos-bottom-right'),
-        ('Scorpio', 'pos-bottom'),
-        ('Sagittarius', 'pos-bottom-left'),
-        ('Capricorn', 'pos-left'),
-        ('Aquarius', 'pos-top-left'),
-        ('Pisces', 'pos-top-inner'),
-        ('Aries', 'pos-right-inner'),
-        ('Taurus', 'pos-bottom-inner'),
-        ('Gemini', 'pos-left-inner')
-    ]
-    
-    chart_html = '<div class="ni-container"><div class="ni-diamond">'
-    chart_html += '<div class="ni-square"></div>'
-    chart_html += '<div class="ni-line-v"></div>'
-    chart_html += '<div class="ni-line-h"></div>'
-    
-    # Place houses based on signs
-    for sign_name, position_class in sign_position_map:
-        sign_idx = sign_positions[sign_name]
-        # Calculate which house this sign represents
-        house_num = ((sign_idx - lagna_idx) % 12) + 1
-        
-        # Get planets in this house
-        planets = house_planets.get(house_num, [])
-        planet_text = '<br>'.join(planets[:3]) if planets else 'Empty'  # Limit to 3 planets for space
-        
-        chart_html += f'''
-        <div class="ni-house {position_class}">
-            <div class="ni-house-num">{house_num}</div>
-            <div class="ni-sign">{sign_name[:3]}</div>
-            <div class="ni-planets">{planet_text}</div>
-        </div>
-        '''
-    
-    # Add center ascendant marker
-    chart_html += f'''
-    <div class="ni-house pos-center">
-        <div style="font-size: 11px;">Asc</div>
-        <div style="font-size: 10px;">{lagna_sign}</div>
-    </div>
-    '''
-    
-    chart_html += '</div></div>'
-    
-    st.markdown(chart_html, unsafe_allow_html=True)
-
 def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     # Parse time string HH:MM
     try:
@@ -573,16 +309,13 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         'nav_lagna_sign': nav_lagna_sign,
         'moon_rasi': get_sign(moon_lon),
         'moon_nakshatra': moon_nak,
-        'moon_pada': moon_pada,
-        'house_planets_rasi': dict(house_planets_rasi),
-        'house_planets_nav': dict(house_planets_nav),
         'selected_depth': selected_depth,
         'utc_dt': utc_dt,
         'max_depth': max_depth
     }
 
 # Streamlit UI
-st.set_page_config(page_title="Vedic Astrology", layout="wide")
+st.set_page_config(page_title="Sivapathy Horoscope", layout="wide")
 
 # Enhanced CSS
 st.markdown("""
@@ -635,7 +368,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Vedic Astrology Chart Generator")
+st.title("Sivapathy Horoscope Chart Generator")
 
 # Initialize session state
 if 'chart_data' not in st.session_state:
@@ -644,8 +377,6 @@ if 'location_data' not in st.session_state:
     st.session_state.location_data = None
 if 'search_results' not in st.session_state:
     st.session_state.search_results = []
-if 'chart_style' not in st.session_state:
-    st.session_state.chart_style = 'South Indian'
 
 # Initialize geolocator
 @st.cache_resource
@@ -698,28 +429,32 @@ if use_custom_coords:
     location_data = {'lat': lat, 'lon': lon}
 else:
     # City search with autocomplete
-    city_query = st.text_input(
-        "Search City",
-        placeholder="Start typing city name...",
-        key="city_input"
-    )
-    
-    # Automatically search as user types
-    if city_query and len(city_query) >= 2:
-        try:
-            locations = geocode(city_query, exactly_one=False, limit=5)
-            if locations:
-                st.session_state.search_results = [
-                    {
-                        'display': f"{loc.address}",
-                        'lat': loc.latitude,
-                        'lon': loc.longitude,
-                        'address': loc.address
-                    }
-                    for loc in locations
-                ]
-            else:
-                city_key = city_query.title()
+    def search_city():
+        query = st.session_state.city_input
+        if query and len(query) >= 2:
+            try:
+                locations = geocode(query, exactly_one=False, limit=5)
+                if locations:
+                    st.session_state.search_results = [
+                        {
+                            'display': f"{loc.address}",
+                            'lat': loc.latitude,
+                            'lon': loc.longitude,
+                            'address': loc.address
+                        }
+                        for loc in locations
+                    ]
+                else:
+                    city_key = query.title()
+                    if city_key in cities_fallback:
+                        st.session_state.search_results = [{
+                            'display': f"{city_key} (Fallback)",
+                            'lat': cities_fallback[city_key]['lat'],
+                            'lon': cities_fallback[city_key]['lon'],
+                            'address': city_key
+                        }]
+            except:
+                city_key = query.title()
                 if city_key in cities_fallback:
                     st.session_state.search_results = [{
                         'display': f"{city_key} (Fallback)",
@@ -727,21 +462,13 @@ else:
                         'lon': cities_fallback[city_key]['lon'],
                         'address': city_key
                     }]
-                else:
-                    st.session_state.search_results = []
-        except:
-            city_key = city_query.title()
-            if city_key in cities_fallback:
-                st.session_state.search_results = [{
-                    'display': f"{city_key} (Fallback)",
-                    'lat': cities_fallback[city_key]['lat'],
-                    'lon': cities_fallback[city_key]['lon'],
-                    'address': city_key
-                }]
-            else:
-                st.session_state.search_results = []
-    elif len(city_query) < 2:
-        st.session_state.search_results = []
+    
+    city_query = st.text_input(
+        "Search City",
+        placeholder="Enter city/town name...",
+        key="city_input",
+        on_change=search_city
+    )
     
     # Show search results
     if st.session_state.search_results:
@@ -762,29 +489,20 @@ else:
         st.info("Using default location: Chennai, India")
 
 # Dasa depth selector
-col_depth, col_style = st.columns(2)
-with col_depth:
-    max_depth_options = {
-        1: 'Dasa only',
-        2: 'Dasa + Bhukti',
-        3: 'Dasa + Bhukti + Anthara',
-        4: 'Dasa + Bhukti + Anthara + Sukshma',
-        5: 'Dasa + Bhukti + Anthara + Sukshma + Prana',
-        6: 'Dasa + Bhukti + Anthara + Sukshma + Prana + Sub-Prana'
-    }
-    selected_depth_str = st.selectbox(
-        "Period Depth",
-        options=list(max_depth_options.values()),
-        index=2
-    )
-    max_depth = list(max_depth_options.keys())[list(max_depth_options.values()).index(selected_depth_str)]
-
-with col_style:
-    chart_style = st.selectbox(
-        "Chart Style",
-        options=["South Indian", "North Indian"],
-        index=0
-    )
+max_depth_options = {
+    1: 'Dasa only',
+    2: 'Dasa + Bhukti',
+    3: 'Dasa + Bhukti + Anthara',
+    4: 'Dasa + Bhukti + Anthara + Sukshma',
+    5: 'Dasa + Bhukti + Anthara + Sukshma + Prana',
+    6: 'Dasa + Bhukti + Anthara + Sukshma + Prana + Sub-Prana'
+}
+selected_depth_str = st.selectbox(
+    "Period Depth",
+    options=list(max_depth_options.values()),
+    index=2
+)
+max_depth = list(max_depth_options.keys())[list(max_depth_options.values()).index(selected_depth_str)]
 
 # Generate button
 if st.button("Generate Chart", use_container_width=True):
@@ -798,7 +516,6 @@ if st.button("Generate Chart", use_container_width=True):
                 st.session_state.chart_data = compute_chart(
                     name, birth_date, birth_time, lat, lon, tz_offset, max_depth
                 )
-                st.session_state.chart_style = chart_style
             st.success("Chart generated successfully!")
             st.rerun()
         except ValueError as e:
@@ -809,7 +526,6 @@ if st.button("Generate Chart", use_container_width=True):
 # Display results
 if st.session_state.chart_data:
     chart_data = st.session_state.chart_data
-    chart_style = st.session_state.get('chart_style', 'South Indian')
     
     st.markdown("---")
     
@@ -820,38 +536,26 @@ if st.session_state.chart_data:
         <div class="summary-item"><strong>Name:</strong> {chart_data['name']}</div>
         <div class="summary-item"><strong>Lagna:</strong> {chart_data['lagna_sign']} ({chart_data['lagna_sid']:.2f}°)</div>
         <div class="summary-item"><strong>Rasi (Moon Sign):</strong> {chart_data['moon_rasi']}</div>
-        <div class="summary-item"><strong>Nakshatra:</strong> {chart_data['moon_nakshatra']} (Pada {chart_data['moon_pada']})</div>
+        <div class="summary-item"><strong>Nakshatra:</strong> {chart_data['moon_nakshatra']}</div>
     </div>
     """, unsafe_allow_html=True)
     
     # Planetary Details
     st.subheader("Planetary Positions")
-    st.dataframe(chart_data['df_planets'], hide_index=True, use_container_width=True)
+    st.table(chart_data['df_planets'])
     
-    # Rasi Chart - Visual
+    # Rasi Chart
     st.subheader("Rasi Chart (D1)")
-    if chart_style == "South Indian":
-        create_south_indian_chart(chart_data['house_planets_rasi'], chart_data['lagna_sign'], 'Rasi')
-    else:
-        create_north_indian_chart(chart_data['house_planets_rasi'], chart_data['lagna_sign'], 'Rasi')
-    
-    with st.expander("View Rasi Chart as Table"):
-        st.dataframe(chart_data['df_rasi'], hide_index=True, use_container_width=True)
+    st.table(chart_data['df_rasi'])
     
     # House Status
     st.subheader("House Analysis")
-    st.dataframe(chart_data['df_house_status'], hide_index=True, use_container_width=True)
+    st.table(chart_data['df_house_status'])
     
-    # Navamsa Chart - Visual
+    # Navamsa Chart
     st.subheader("Navamsa Chart (D9)")
-    if chart_style == "South Indian":
-        create_south_indian_chart(chart_data['house_planets_nav'], chart_data['nav_lagna_sign'], 'Navamsa')
-    else:
-        create_north_indian_chart(chart_data['house_planets_nav'], chart_data['nav_lagna_sign'], 'Navamsa')
-    
-    with st.expander("View Navamsa Chart as Table"):
-        st.write(f"Navamsa Lagna: {chart_data['nav_lagna_sign']} ({chart_data['nav_lagna']:.2f}°)")
-        st.dataframe(chart_data['df_nav'], hide_index=True, use_container_width=True)
+    st.write(f"Navamsa Lagna: {chart_data['nav_lagna_sign']} ({chart_data['nav_lagna']:.2f}°)")
+    st.table(chart_data['df_nav'])
     
     # Vimshottari Dasa
     st.subheader(f"Vimshottari Dasa ({chart_data['selected_depth']})")
@@ -871,7 +575,7 @@ if st.session_state.chart_data:
             'Duration': duration_str(dur, 'dasa')
         })
     df_dasa = pd.DataFrame(dasa_data)
-    st.dataframe(df_dasa, hide_index=True, use_container_width=True)
+    st.table(df_dasa)
     
     # Nested periods with expanders
     if max_depth >= 2:
@@ -893,7 +597,7 @@ if st.session_state.chart_data:
                         'Duration': duration_str(dur, 'bhukti')
                     })
                 df_bhukti = pd.DataFrame(bhukti_data)
-                st.dataframe(df_bhukti, hide_index=True, use_container_width=True)
+                st.table(df_bhukti)
                 
                 if max_depth >= 3:
                     with st.expander("View Antharas", expanded=False):
@@ -914,7 +618,7 @@ if st.session_state.chart_data:
                                     'Duration': duration_str(dur, 'anthara')
                                 })
                             df_anthara = pd.DataFrame(anthara_data)
-                            st.dataframe(df_anthara, hide_index=True, use_container_width=True)
+                            st.table(df_anthara)
                             
                             if max_depth >= 4:
                                 with st.expander("View Sukshmas", expanded=False):
@@ -935,7 +639,7 @@ if st.session_state.chart_data:
                                                 'Duration': duration_str(dur, 'sukshma')
                                             })
                                         df_sukshma = pd.DataFrame(sukshma_data)
-                                        st.dataframe(df_sukshma, hide_index=True, use_container_width=True)
+                                        st.table(df_sukshma)
                                         
                                         if max_depth >= 5:
                                             with st.expander("View Pranas", expanded=False):
@@ -956,7 +660,7 @@ if st.session_state.chart_data:
                                                             'Duration': duration_str(dur, 'prana')
                                                         })
                                                     df_prana = pd.DataFrame(prana_data)
-                                                    st.dataframe(df_prana, hide_index=True, use_container_width=True)
+                                                    st.table(df_prana)
                                                     
                                                     if max_depth >= 6:
                                                         with st.expander("View Sub-Pranas", expanded=False):
@@ -977,11 +681,11 @@ if st.session_state.chart_data:
                                                                         'Duration': duration_str(dur, 'sub_prana')
                                                                     })
                                                                 df_sub_prana = pd.DataFrame(sub_prana_data)
-                                                                st.dataframe(df_sub_prana, hide_index=True, use_container_width=True)
+                                                                st.table(df_sub_prana)
     
     st.info("Note: Periods filtered from birth. Durations approximate.")
 else:
     st.info("Enter details above and click 'Generate Chart' to begin")
 
 st.markdown("---")
-st.caption("Vedic Astrology Chart Generator")
+st.caption("Sivapathy Horoscope Chart Generator")
