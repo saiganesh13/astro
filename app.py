@@ -356,15 +356,18 @@ def plot_north_indian_style(ax, house_to_planets, house_to_sign, title):
     ax.plot([-0.4, -0.4], [-0.4, 0.4], 'k-', linewidth=1)
     ax.plot([0.4, 0.4], [-0.4, 0.4], 'k-', linewidth=1)
 
+    box_size = 0.25  # Uniform box size for identical dimensions
+    half_box = box_size / 2
+
     for house in range(1, 13):
         x, y = house_positions[house]
         sign = house_to_sign.get(house, '')
         planets = ', '.join(house_to_planets.get(house, []))
         text = f'H{house}\n{sign[:3]}\n{planets[:10]}'  # Abbreviate
         color = '#F5F5F5'  # Light uniform color
-        box = FancyBboxPatch((x-0.15, y-0.15), 0.3, 0.3, boxstyle="round,pad=0.02", ec="black", fc=color, alpha=0.8)
+        box = FancyBboxPatch((x - half_box, y - half_box), box_size, box_size, boxstyle="round,pad=0.02", ec="black", fc=color, alpha=0.8)
         ax.add_patch(box)
-        ax.text(x, y, text, ha='center', va='center', fontsize=8, weight='bold')
+        ax.text(x, y, text, ha='center', va='center', fontsize=7, weight='bold')  # Slightly smaller font
 
     ax.set_xlim(-1, 1)
     ax.set_ylim(-1, 1)
@@ -393,9 +396,12 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
     # Uniform light color
     uniform_color = '#F5F5F5'
 
+    # Smaller box dimensions for compact chart
+    box_width = 0.7
+    box_height = 0.7
+    spacing = 0.7
+
     # Plot each sign box closer
-    box_width = 0.85
-    box_height = 0.85
     for sign, (grid_x, grid_y) in sign_positions.items():
         house = house_for_sign[sign]
         planets = sorted(house_to_planets.get(house, []))
@@ -405,20 +411,20 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
             text_lines.append(planets_str[:15])  # Limit length
         text = '\n'.join(text_lines)
         
-        x = grid_x * 0.85 + 0.075
-        y = (3 - grid_y) * 0.85 + 0.075  # Invert y for top-down, closer spacing
+        x = grid_x * spacing + 0.15
+        y = (3 - grid_y) * spacing + 0.15  # Invert y for top-down, closer spacing
         color = uniform_color  # Uniform color
         box = FancyBboxPatch((x, y), box_width, box_height, boxstyle="round,pad=0.02", 
                              ec="black", fc=color, alpha=0.9, linewidth=1.5)
         ax.add_patch(box)
         ax.text(x + box_width/2, y + box_height/2, text, ha='center', va='center', 
-                fontsize=7, weight='bold', wrap=True)
+                fontsize=6, weight='bold', wrap=True)
 
-    ax.set_xlim(0, 4)
-    ax.set_ylim(0, 4)
+    ax.set_xlim(0, 3.5)
+    ax.set_ylim(0, 3.5)
     ax.set_aspect('equal')
     ax.invert_yaxis()  # Make top row at top
-    ax.set_title(title, fontsize=12, weight='bold')
+    ax.set_title(title, fontsize=10, weight='bold')
     ax.axis('off')
 
 # Streamlit UI
@@ -668,11 +674,11 @@ if st.session_state.chart_data:
         for h in range(1, 13):
             sign_start = (chart_data['lagna_sid'] + (h - 1) * 30) % 360
             house_to_sign_rasi[h] = get_sign(sign_start)
-        fig, ax = plt.subplots(figsize=(5, 5))
+        fig, ax = plt.subplots(figsize=(4, 4))  # Smaller figure size
         plot_north_indian_style(ax, chart_data['house_to_planets_rasi'], house_to_sign_rasi, 'Rasi Chart (North Indian)')
         st.pyplot(fig)
     elif chart_style == "South Indian":
-        fig, ax = plt.subplots(figsize=(5, 5))
+        fig, ax = plt.subplots(figsize=(4, 4))  # Smaller figure size
         plot_south_indian_style(ax, chart_data['house_to_planets_rasi'], chart_data['lagna_sign'], 'Rasi Chart (South Indian)')
         st.pyplot(fig)
     
@@ -691,11 +697,11 @@ if st.session_state.chart_data:
         for h in range(1, 13):
             sign_start = (chart_data['nav_lagna'] + (h - 1) * 30) % 360
             house_to_sign_nav[h] = get_sign(sign_start)
-        fig, ax = plt.subplots(figsize=(5, 5))
+        fig, ax = plt.subplots(figsize=(4, 4))  # Smaller figure size
         plot_north_indian_style(ax, chart_data['house_to_planets_nav'], house_to_sign_nav, 'Navamsa Chart (North Indian)')
         st.pyplot(fig)
     elif chart_style == "South Indian":
-        fig, ax = plt.subplots(figsize=(5, 5))
+        fig, ax = plt.subplots(figsize=(4, 4))  # Smaller figure size
         plot_south_indian_style(ax, chart_data['house_to_planets_nav'], chart_data['nav_lagna_sign'], 'Navamsa Chart (South Indian)')
         st.pyplot(fig)
     
