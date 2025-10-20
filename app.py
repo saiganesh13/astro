@@ -157,55 +157,8 @@ def duration_str(delta, level='dasa'):
         return f"{years}y {months}m {days}d"
 
 def create_south_indian_chart(house_planets, chart_type='Rasi'):
-    """Create South Indian style chart HTML"""
-    chart_html = f"""
-    <style>
-        .si-chart {{
-            display: grid;
-            grid-template-columns: repeat(4, 150px);
-            grid-template-rows: repeat(4, 150px);
-            gap: 0;
-            margin: 20px auto;
-            width: fit-content;
-            border: 2px solid #125336;
-        }}
-        .si-house {{
-            border: 1px solid #125336;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 8px;
-            font-size: 11px;
-            background: white;
-            position: relative;
-        }}
-        .si-house-num {{
-            position: absolute;
-            top: 3px;
-            left: 5px;
-            font-size: 9px;
-            color: #666;
-            font-weight: bold;
-        }}
-        .si-planets {{
-            text-align: center;
-            color: #125336;
-            font-weight: 500;
-            word-wrap: break-word;
-            max-width: 130px;
-        }}
-        .si-chart-title {{
-            text-align: center;
-            font-size: 16px;
-            font-weight: bold;
-            color: #125336;
-            margin-bottom: 10px;
-        }}
-    </style>
-    <div class="si-chart-title">{chart_type} Chart - South Indian Style</div>
-    <div class="si-chart">
-    """
+    """Create South Indian style chart using Streamlit columns"""
+    st.markdown(f"<h4 style='text-align: center; color: #125336;'>{chart_type} Chart - South Indian Style</h4>", unsafe_allow_html=True)
     
     # South Indian layout: houses are in fixed positions
     # Layout pattern:
@@ -214,26 +167,32 @@ def create_south_indian_chart(house_planets, chart_type='Rasi'):
     #  10     |  5
     #   9  8  7  6
     
-    layout = [12, 1, 2, 3, 11, None, None, 4, 10, None, None, 5, 9, 8, 7, 6]
+    layout = [
+        [12, 1, 2, 3],
+        [11, None, None, 4],
+        [10, None, None, 5],
+        [9, 8, 7, 6]
+    ]
     
-    for i, house_num in enumerate(layout):
-        if house_num is None:
-            chart_html += '<div class="si-house" style="background: #f8f9fa; border: none;"></div>'
-        else:
-            planets = house_planets.get(house_num, [])
-            planet_text = '<br>'.join(planets) if planets else ''
-            chart_html += f'''
-            <div class="si-house">
-                <span class="si-house-num">{house_num}</span>
-                <div class="si-planets">{planet_text}</div>
-            </div>
-            '''
-    
-    chart_html += "</div>"
-    return chart_html
+    for row in layout:
+        cols = st.columns(4)
+        for idx, house_num in enumerate(row):
+            with cols[idx]:
+                if house_num is None:
+                    st.markdown("<div style='height: 100px; background: transparent;'></div>", unsafe_allow_html=True)
+                else:
+                    planets = house_planets.get(house_num, [])
+                    planet_text = ', '.join(planets) if planets else 'Empty'
+                    st.markdown(f"""
+                    <div style='border: 2px solid #125336; padding: 10px; height: 100px; background: white; position: relative;'>
+                        <div style='font-size: 10px; color: #666; font-weight: bold;'>{house_num}</div>
+                        <div style='margin-top: 10px; text-align: center; color: #125336; font-size: 11px;'>{planet_text}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
 def create_north_indian_chart(house_planets, lagna_sign, chart_type='Rasi'):
-    """Create North Indian style chart HTML"""
+    """Create North Indian style chart using Streamlit columns"""
+    st.markdown(f"<h4 style='text-align: center; color: #125336;'>{chart_type} Chart - North Indian Style</h4>", unsafe_allow_html=True)
     
     # In North Indian chart, signs are fixed, ascendant determines which house is which
     sign_positions = {
@@ -242,126 +201,53 @@ def create_north_indian_chart(house_planets, lagna_sign, chart_type='Rasi'):
         'Sagittarius': 8, 'Capricorn': 9, 'Aquarius': 10, 'Pisces': 11
     }
     
-    # Diamond layout positions (12 houses in diamond shape)
-    # Position mapping for North Indian chart
-    #        0
-    #     11   1
-    #  10   X    2
-    #     9    3
+    # North Indian diamond layout
+    #        12
+    #     11    1
+    #  10    Asc   2
+    #     9     3
     #   8    4
     #     7  5
     #       6
     
-    chart_html = f"""
-    <style>
-        .ni-chart {{
-            display: grid;
-            grid-template-columns: repeat(7, 80px);
-            grid-template-rows: repeat(7, 80px);
-            gap: 0;
-            margin: 20px auto;
-            width: fit-content;
-        }}
-        .ni-house {{
-            border: 1px solid #125336;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 5px;
-            font-size: 10px;
-            background: white;
-            position: relative;
-        }}
-        .ni-house-num {{
-            position: absolute;
-            top: 2px;
-            left: 3px;
-            font-size: 8px;
-            color: #666;
-            font-weight: bold;
-        }}
-        .ni-sign {{
-            position: absolute;
-            top: 2px;
-            right: 3px;
-            font-size: 7px;
-            color: #888;
-        }}
-        .ni-planets {{
-            text-align: center;
-            color: #125336;
-            font-weight: 500;
-            font-size: 9px;
-            word-wrap: break-word;
-            max-width: 70px;
-        }}
-        .ni-empty {{
-            background: transparent;
-            border: none;
-        }}
-        .ni-chart-title {{
-            text-align: center;
-            font-size: 16px;
-            font-weight: bold;
-            color: #125336;
-            margin-bottom: 10px;
-        }}
-        .ni-center {{
-            border: 2px solid #125336;
-            background: #f0f7f4;
-            font-weight: bold;
-            color: #125336;
-        }}
-    </style>
-    <div class="ni-chart-title">{chart_type} Chart - North Indian Style</div>
-    <div class="ni-chart">
-    """
+    layout_rows = [
+        [None, None, None, 12, None, None, None],
+        [None, None, 11, None, 1, None, None],
+        [None, 10, None, 'ASC', None, 2, None],
+        [None, None, 9, None, 3, None, None],
+        [None, 8, None, 4, None, None, None],
+        [None, None, 7, None, 5, None, None],
+        [None, None, None, 6, None, None, None]
+    ]
     
-    # North Indian diamond layout
-    grid = [[None for _ in range(7)] for _ in range(7)]
-    
-    # Map houses to grid positions
-    house_grid_map = {
-        12: (0, 3), 1: (1, 4), 2: (2, 5), 3: (3, 6),
-        11: (1, 2), 4: (3, 5), 
-        10: (2, 1), 5: (4, 6),
-        9: (3, 2), 6: (5, 5),
-        8: (4, 1), 7: (5, 4),
-        'center1': (3, 3), 'center2': (4, 3), 'center3': (3, 4), 'center4': (4, 4)
-    }
-    
-    # Place houses in grid
-    for house_num in range(1, 13):
-        row, col = house_grid_map[house_num]
-        sign_idx = (sign_positions[lagna_sign] + house_num - 1) % 12
-        sign = sign_names[sign_idx]
-        planets = house_planets.get(house_num, [])
-        planet_text = '<br>'.join(planets) if planets else ''
-        grid[row][col] = f'''
-        <div class="ni-house">
-            <span class="ni-house-num">{house_num}</span>
-            <span class="ni-sign">{sign[:3]}</span>
-            <div class="ni-planets">{planet_text}</div>
-        </div>
-        '''
-    
-    # Add center
-    grid[3][3] = '<div class="ni-house ni-center">Asc<br>' + lagna_sign[:3] + '</div>'
-    
-    # Fill empty spaces
-    for i in range(7):
-        for j in range(7):
-            if grid[i][j] is None:
-                grid[i][j] = '<div class="ni-empty"></div>'
-    
-    # Render grid
-    for row in grid:
-        for cell in row:
-            chart_html += cell
-    
-    chart_html += "</div>"
-    return chart_html
+    for row in layout_rows:
+        cols = st.columns(7)
+        for idx, cell in enumerate(row):
+            with cols[idx]:
+                if cell is None:
+                    st.markdown("<div style='height: 70px; background: transparent;'></div>", unsafe_allow_html=True)
+                elif cell == 'ASC':
+                    st.markdown(f"""
+                    <div style='border: 2px solid #125336; padding: 5px; height: 70px; background: #f0f7f4; 
+                                display: flex; align-items: center; justify-content: center;'>
+                        <div style='text-align: center; color: #125336; font-weight: bold; font-size: 11px;'>
+                            Asc<br>{lagna_sign[:3]}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    house_num = cell
+                    sign_idx = (sign_positions[lagna_sign] + house_num - 1) % 12
+                    sign = sign_names[sign_idx]
+                    planets = house_planets.get(house_num, [])
+                    planet_text = ', '.join(planets) if planets else 'Empty'
+                    st.markdown(f"""
+                    <div style='border: 2px solid #125336; padding: 5px; height: 70px; background: white; position: relative;'>
+                        <div style='font-size: 9px; color: #666; font-weight: bold;'>{house_num}</div>
+                        <div style='font-size: 8px; color: #888; position: absolute; top: 5px; right: 5px;'>{sign[:3]}</div>
+                        <div style='margin-top: 15px; text-align: center; color: #125336; font-size: 9px;'>{planet_text}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
 def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     # Parse time string HH:MM
@@ -774,10 +660,9 @@ if st.session_state.chart_data:
     # Rasi Chart - Visual
     st.subheader("Rasi Chart (D1)")
     if chart_style == "South Indian":
-        rasi_chart_html = create_south_indian_chart(chart_data['house_planets_rasi'], 'Rasi')
+        create_south_indian_chart(chart_data['house_planets_rasi'], 'Rasi')
     else:
-        rasi_chart_html = create_north_indian_chart(chart_data['house_planets_rasi'], chart_data['lagna_sign'], 'Rasi')
-    st.markdown(rasi_chart_html, unsafe_allow_html=True)
+        create_north_indian_chart(chart_data['house_planets_rasi'], chart_data['lagna_sign'], 'Rasi')
     
     with st.expander("View Rasi Chart as Table"):
         st.dataframe(chart_data['df_rasi'], hide_index=True, use_container_width=True)
@@ -789,10 +674,9 @@ if st.session_state.chart_data:
     # Navamsa Chart - Visual
     st.subheader("Navamsa Chart (D9)")
     if chart_style == "South Indian":
-        nav_chart_html = create_south_indian_chart(chart_data['house_planets_nav'], 'Navamsa')
+        create_south_indian_chart(chart_data['house_planets_nav'], 'Navamsa')
     else:
-        nav_chart_html = create_north_indian_chart(chart_data['house_planets_nav'], chart_data['nav_lagna_sign'], 'Navamsa')
-    st.markdown(nav_chart_html, unsafe_allow_html=True)
+        create_north_indian_chart(chart_data['house_planets_nav'], chart_data['nav_lagna_sign'], 'Navamsa')
     
     with st.expander("View Navamsa Chart as Table"):
         st.write(f"Navamsa Lagna: {chart_data['nav_lagna_sign']} ({chart_data['nav_lagna']:.2f}°)")
