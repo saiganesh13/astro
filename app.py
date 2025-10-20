@@ -315,7 +315,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     }
 
 # Streamlit UI
-st.set_page_config(page_title="Sivapathy Horoscope", layout="wide")
+st.set_page_config(page_title="Sivapathy Astrology", layout="wide")
 
 # Enhanced CSS
 st.markdown("""
