@@ -35,6 +35,8 @@ nak_names = [
 
 years = [7, 20, 6, 10, 7, 18, 16, 19, 17] * 3
 
+sign_lords = ['Mars', 'Venus', 'Mercury', 'Moon', 'Sun', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Saturn', 'Jupiter']
+
 def get_lahiri_ayanamsa(year):
     base = 23.853
     rate = 50.2388 / 3600.0
@@ -238,6 +240,39 @@ def compute_chart(date_text, time_text, ampm, lat, lon, tz_offset, max_depth):
         nav_data.append([f"House {h}", nav_sign, pls])
     df_nav = pd.DataFrame(nav_data, columns=['House', 'Sign', 'Planets'])
 
+    # House Status
+    lagna_sign = get_sign(lagna_sid)
+    lagna_idx = sign_names.index(lagna_sign)
+    planet_to_house = {p.capitalize(): get_house(lon_sid[p], lagna_sid) for p in lon_sid}
+    aspects_dict = {
+        'Sun': [7],
+        'Moon': [7],
+        'Mars': [4,7,8],
+        'Mercury': [7],
+        'Jupiter': [5,7,9],
+        'Venus': [7],
+        'Saturn': [3,7,10],
+        'Rahu': [7],
+        'Ketu': [7],
+    }
+    house_status_data = []
+    for h in range(1,13):
+        sign_idx = (lagna_idx + h - 1) % 12
+        house_sign = sign_names[sign_idx]
+        lord = sign_lords[sign_idx]
+        lord_house = planet_to_house[lord]
+        aspecting = []
+        for planet, offsets in aspects_dict.items():
+            if planet in planet_to_house:
+                p_h = planet_to_house[planet]
+                for off in offsets:
+                    a_h = ((p_h - 1 + (off - 1)) % 12) + 1
+                    if a_h == h:
+                        aspecting.append(planet)
+        aspect_str = ', '.join(aspecting) if aspecting else 'None'
+        house_status_data.append([f"House {h}", house_sign, lord, f"House {lord_house}", aspect_str])
+    df_house_status = pd.DataFrame(house_status_data, columns=['House', 'Sign', 'Lord', 'Lord in', 'Aspects from'])
+
     # Dasa - FIXED: correct dasa_start_dt
     moon_lon = lon_sid['moon']
     dasa_start_idx, balance_years = generate_vimshottari_dasa(moon_lon)
@@ -254,13 +289,13 @@ def compute_chart(date_text, time_text, ampm, lat, lon, tz_offset, max_depth):
                          6: 'Dasa + Bhukti + Anthara + Sukshma + Prana + Sub-Prana'}
     selected_depth = max_depth_options[max_depth]
 
-    lagna_sign = get_sign(lagna_sid)
     nav_lagna_sign = get_sign(nav_lagna)
 
     return {
         'df_planets': df_planets,
         'df_rasi': df_rasi,
         'df_nav': df_nav,
+        'df_house_status': df_house_status,
         'dasa_periods_filtered': dasa_periods_filtered,
         'lagna_sid': lagna_sid,
         'nav_lagna': nav_lagna,
@@ -407,6 +442,9 @@ if st.session_state.chart_data:
     st.subheader("=== RASI CHART ===")
     st.write(f"Lagna: {chart_data['lagna_sign']} ({chart_data['lagna_sid']:.2f}°)")
     st.table(chart_data['df_rasi'])
+
+    st.subheader("=== HOUSE STATUS ===")
+    st.table(chart_data['df_house_status'])
 
     st.subheader("=== NAVAMSA CHART ===")
     st.write(f"Navamsa Lagna: {chart_data['nav_lagna_sign']} ({chart_data['nav_lagna']:.2f}°)")
