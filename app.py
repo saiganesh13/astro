@@ -368,7 +368,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Sivapathy Horoscope Chart Generator")
+st.title("Sivapathy Astrology Data Generator")
 
 # Initialize session state
 if 'chart_data' not in st.session_state:
@@ -545,7 +545,7 @@ if st.session_state.chart_data:
     st.table(chart_data['df_planets'])
     
     # Rasi Chart
-    st.subheader("Rasi Chart (D1)")
+    st.subheader("Rasi Chart")
     st.table(chart_data['df_rasi'])
     
     # House Status
@@ -553,7 +553,7 @@ if st.session_state.chart_data:
     st.table(chart_data['df_house_status'])
     
     # Navamsa Chart
-    st.subheader("Navamsa Chart (D9)")
+    st.subheader("Navamsa Chart")
     st.write(f"Navamsa Lagna: {chart_data['nav_lagna_sign']} ({chart_data['nav_lagna']:.2f}°)")
     st.table(chart_data['df_nav'])
     
@@ -688,4 +688,4 @@ else:
     st.info("Enter details above and click 'Generate Chart' to begin")
 
 st.markdown("---")
-st.caption("Sivapathy Horoscope Chart Generator")
+st.caption("Sivapathy Astrology Data Generator")
