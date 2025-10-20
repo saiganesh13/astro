@@ -1,8 +1,4 @@
-streamlit
-astropy
-geopy
-pandas
-geopy
-collections
-math
-datetime
+streamlit==1.38.0
+pandas==2.2.2
+geopy==2.4.1
+astropy==6.1.3
