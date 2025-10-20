@@ -301,13 +301,9 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
 
     # Prepare house to planet mapping for charts
     house_to_planets_rasi = house_planets_rasi
-    house_to_sign_rasi = {h: get_sign((lagna_sid + (h - 1) * 30) % 360) for h in range(1, 13)}
-    lagna_house = 1  # Lagna is always house 1
 
     # For Navamsa
     house_to_planets_nav = house_planets_nav
-    house_to_sign_nav = {h: get_sign((nav_lagna + (h - 1) * 30) % 360) for h in range(1, 13)}
-    nav_lagna_house = 1
 
     return {
         'name': name,
@@ -327,9 +323,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         'utc_dt': utc_dt,
         'max_depth': max_depth,
         'house_to_planets_rasi': house_to_planets_rasi,
-        'house_to_sign_rasi': house_to_sign_rasi,
-        'house_to_planets_nav': house_to_planets_nav,
-        'house_to_sign_nav': house_to_sign_nav
+        'house_to_planets_nav': house_to_planets_nav
     }
 
 def plot_north_indian_style(ax, house_to_planets, house_to_sign, title):
@@ -378,42 +372,53 @@ def plot_north_indian_style(ax, house_to_planets, house_to_sign, title):
     ax.set_title(title)
     ax.axis('off')
 
-def plot_south_indian_style(ax, house_to_planets, house_to_sign, title):
-    # South Indian chart is fixed signs, rotating houses
-    # Fixed sign positions: Aries top-left, counter-clockwise
+def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
+    # Fixed sign positions for South Indian chart
     sign_positions = {
-        'Aries': (0, 3), 'Taurus': (1, 3), 'Gemini': (2, 3), 'Cancer': (3, 3),
-        'Leo': (3, 2), 'Virgo': (3, 1), 'Libra': (3, 0), 'Scorpio': (2, 0),
-        'Sagittarius': (1, 0), 'Capricorn': (0, 0), 'Aquarius': (0, 1), 'Pisces': (0, 2)
+        'Pisces': (0, 3), 'Aries': (1, 3), 'Taurus': (2, 3), 'Gemini': (3, 3),
+        'Cancer': (3, 2), 'Leo': (3, 1), 'Virgo': (3, 0),
+        'Libra': (2, 0), 'Scorpio': (1, 0), 'Sagittarius': (0, 0),
+        'Capricorn': (0, 1), 'Aquarius': (0, 2)
     }
 
-    # Draw grid
-    for i in range(4):
-        ax.plot([i, i], [0, 4], 'k-', linewidth=1)
-    for j in range(5):
-        ax.plot([0, 4], [j, j], 'k-', linewidth=1)
+    # Draw grid lines
+    for i in range(5):
+        ax.plot([i, i], [0, 4], 'k-', linewidth=1)  # vertical
+        ax.plot([0, 4], [i, i], 'k-', linewidth=1)  # horizontal
 
-    # Lagna house is 1, but signs are fixed, houses rotate based on Lagna sign
-    lagna_sign_idx = 0  # Aries is 0
+    # Compute house for each sign based on Lagna
+    lagna_sign_idx = sign_names.index(lagna_sign)
     house_for_sign = {}
     for s_idx, sign in enumerate(sign_names):
         house = ((s_idx - lagna_sign_idx) % 12) + 1
         house_for_sign[sign] = house
 
-    for sign, (x, y) in sign_positions.items():
+    # Plot each sign box
+    box_width = 0.75
+    box_height = 0.75
+    for sign, (grid_x, grid_y) in sign_positions.items():
         house = house_for_sign[sign]
-        planets = ', '.join(house_to_planets.get(house, []))
-        text = f'{sign[:3]}\nH{house}\n{planets[:10]}'
-        color = 'yellow' if house == 1 else 'white'
-        box = FancyBboxPatch((x*0.8+0.1, (3-y)*0.8+0.1), 0.7, 0.7, boxstyle="round,pad=0.02", ec="black", fc=color, alpha=0.8)
+        planets = sorted(house_to_planets.get(house, []))
+        planets_str = '\n'.join(planets) if planets else ''
+        text_lines = [sign[:3], f'H{house}']
+        if planets_str:
+            text_lines.append(planets_str[:15])  # Limit length
+        text = '\n'.join(text_lines)
+        
+        x = grid_x * 1 + 0.125
+        y = (3 - grid_y) * 1 + 0.125  # Invert y for top-down
+        color = 'yellow' if house == 1 else 'lightblue'
+        box = FancyBboxPatch((x, y), box_width, box_height, boxstyle="round,pad=0.02", 
+                             ec="black", fc=color, alpha=0.8, linewidth=1.5)
         ax.add_patch(box)
-        ax.text(x*0.8+0.5, (3-y)*0.8+0.5, text, ha='center', va='center', fontsize=8, weight='bold')
+        ax.text(x + box_width/2, y + box_height/2, text, ha='center', va='center', 
+                fontsize=8, weight='bold', wrap=True)
 
     ax.set_xlim(0, 4)
     ax.set_ylim(0, 4)
     ax.set_aspect('equal')
-    ax.invert_yaxis()  # Top is higher y
-    ax.set_title(title)
+    ax.invert_yaxis()  # Make top row at top
+    ax.set_title(title, fontsize=12, weight='bold')
     ax.axis('off')
 
 # Streamlit UI
@@ -658,12 +663,17 @@ if st.session_state.chart_data:
     if chart_style == "Table":
         st.dataframe(chart_data['df_rasi'], hide_index=True, use_container_width=True)
     elif chart_style == "North Indian":
+        # For North Indian, need house_to_sign_rasi
+        house_to_sign_rasi = {}
+        for h in range(1, 13):
+            sign_start = (chart_data['lagna_sid'] + (h - 1) * 30) % 360
+            house_to_sign_rasi[h] = get_sign(sign_start)
         fig, ax = plt.subplots(figsize=(8, 8))
-        plot_north_indian_style(ax, chart_data['house_to_planets_rasi'], chart_data['house_to_sign_rasi'], 'Rasi Chart (North Indian)')
+        plot_north_indian_style(ax, chart_data['house_to_planets_rasi'], house_to_sign_rasi, 'Rasi Chart (North Indian)')
         st.pyplot(fig)
     elif chart_style == "South Indian":
         fig, ax = plt.subplots(figsize=(8, 8))
-        plot_south_indian_style(ax, chart_data['house_to_planets_rasi'], chart_data['house_to_sign_rasi'], 'Rasi Chart (South Indian)')
+        plot_south_indian_style(ax, chart_data['house_to_planets_rasi'], chart_data['lagna_sign'], 'Rasi Chart (South Indian)')
         st.pyplot(fig)
     
     # House Status
@@ -676,12 +686,17 @@ if st.session_state.chart_data:
     if chart_style == "Table":
         st.dataframe(chart_data['df_nav'], hide_index=True, use_container_width=True)
     elif chart_style == "North Indian":
+        # For Navamsa North
+        house_to_sign_nav = {}
+        for h in range(1, 13):
+            sign_start = (chart_data['nav_lagna'] + (h - 1) * 30) % 360
+            house_to_sign_nav[h] = get_sign(sign_start)
         fig, ax = plt.subplots(figsize=(8, 8))
-        plot_north_indian_style(ax, chart_data['house_to_planets_nav'], chart_data['house_to_sign_nav'], 'Navamsa Chart (North Indian)')
+        plot_north_indian_style(ax, chart_data['house_to_planets_nav'], house_to_sign_nav, 'Navamsa Chart (North Indian)')
         st.pyplot(fig)
     elif chart_style == "South Indian":
         fig, ax = plt.subplots(figsize=(8, 8))
-        plot_south_indian_style(ax, chart_data['house_to_planets_nav'], chart_data['house_to_sign_nav'], 'Navamsa Chart (South Indian)')
+        plot_south_indian_style(ax, chart_data['house_to_planets_nav'], chart_data['nav_lagna_sign'], 'Navamsa Chart (South Indian)')
         st.pyplot(fig)
     
     # Vimshottari Dasa
