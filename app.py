@@ -441,18 +441,18 @@ if st.button("Generate Chart", use_container_width=True):
 if st.session_state.chart_data:
     chart_data = st.session_state.chart_data
     st.subheader("=== PLANETARY DETAILS ===")
-    st.table(chart_data['df_planets'])
+    st.table(chart_data['df_planets'].reset_index(drop=True))
 
     st.subheader("=== RASI CHART ===")
     st.write(f"Lagna: {chart_data['lagna_sign']} ({chart_data['lagna_sid']:.2f}°)")
-    st.table(chart_data['df_rasi'])
+    st.table(chart_data['df_rasi'].reset_index(drop=True))
 
     st.subheader("=== HOUSE STATUS ===")
-    st.table(chart_data['df_house_status'])
+    st.table(chart_data['df_house_status'].reset_index(drop=True))
 
     st.subheader("=== NAVAMSA CHART ===")
     st.write(f"Navamsa Lagna: {chart_data['nav_lagna_sign']} ({chart_data['nav_lagna']:.2f}°)")
-    st.table(chart_data['df_nav'])
+    st.table(chart_data['df_nav'].reset_index(drop=True))
 
     st.subheader(f"=== VIMSHOTTARI {chart_data['selected_depth'].upper()} ===")
 
@@ -466,7 +466,7 @@ if st.session_state.chart_data:
         dur = end - start
         dasa_data.append({'Planet': lord, 'Start': start.strftime('%Y-%m-%d'), 'End': end.strftime('%Y-%m-%d'), 'Duration': duration_str(dur)})
     df_dasa = pd.DataFrame(dasa_data)
-    st.table(df_dasa)
+    st.table(df_dasa.reset_index(drop=True))
 
     # Nested for deeper levels using expanders and selects
     if max_depth >= 2:
@@ -482,7 +482,7 @@ if st.session_state.chart_data:
                     dur = b_end - b_start
                     bhukti_data.append({'Planet': b_lord, 'Start': b_start.strftime('%Y-%m-%d'), 'End': b_end.strftime('%Y-%m-%d'), 'Duration': duration_str(dur)})
                 df_bhukti = pd.DataFrame(bhukti_data)
-                st.table(df_bhukti)
+                st.table(df_bhukti.reset_index(drop=True))
 
                 if max_depth >= 3:
                     with st.expander("Antharas (Select Bhukti to view)"):
@@ -497,7 +497,7 @@ if st.session_state.chart_data:
                                 dur = a_end - a_start
                                 anthara_data.append({'Planet': a_lord, 'Start': a_start.strftime('%Y-%m-%d %H:%M'), 'End': a_end.strftime('%Y-%m-%d %H:%M'), 'Duration': duration_str(dur)})
                             df_anthara = pd.DataFrame(anthara_data)
-                            st.table(df_anthara)
+                            st.table(df_anthara.reset_index(drop=True))
 
                             if max_depth >= 4:
                                 with st.expander("Sukshmas (Select Anthara to view)"):
@@ -512,7 +512,7 @@ if st.session_state.chart_data:
                                             dur = s_end - s_start
                                             sukshma_data.append({'Planet': s_lord, 'Start': s_start.strftime('%Y-%m-%d %H:%M'), 'End': s_end.strftime('%Y-%m-%d %H:%M'), 'Duration': duration_str(dur)})
                                         df_sukshma = pd.DataFrame(sukshma_data)
-                                        st.table(df_sukshma)
+                                        st.table(df_sukshma.reset_index(drop=True))
 
                                         if max_depth >= 5:
                                             with st.expander("Pranas (Select Sukshma to view)"):
@@ -527,7 +527,7 @@ if st.session_state.chart_data:
                                                         dur = pr_end - pr_start
                                                         prana_data.append({'Planet': pr_lord, 'Start': pr_start.strftime('%Y-%m-%d %H:%M'), 'End': pr_end.strftime('%Y-%m-%d %H:%M'), 'Duration': duration_str(dur)})
                                                     df_prana = pd.DataFrame(prana_data)
-                                                    st.table(df_prana)
+                                                    st.table(df_prana.reset_index(drop=True))
 
                                                     if max_depth >= 6:
                                                         with st.expander("Sub-Pranas (Select Prana to view)"):
@@ -542,7 +542,7 @@ if st.session_state.chart_data:
                                                                     dur = sp_end - sp_start
                                                                     sub_prana_data.append({'Planet': sp_lord, 'Start': sp_start.strftime('%Y-%m-%d %H:%M'), 'End': sp_end.strftime('%Y-%m-%d %H:%M'), 'Duration': duration_str(dur)})
                                                                 df_sub_prana = pd.DataFrame(sub_prana_data)
-                                                                st.table(df_sub_prana)
+                                                                st.table(df_sub_prana.reset_index(drop=True))
     st.info("Note: Periods filtered from birth. Durations approximate. Deeper levels use nested expanders for navigation.")
 else:
     st.info("Enter details and click 'Generate Chart' to begin.")
