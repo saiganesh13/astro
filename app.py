@@ -316,7 +316,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     }
 
 # Streamlit UI
-st.set_page_config(page_title="Vedic Astrology", layout="wide")
+st.set_page_config(page_title="Sivapathy Horoscope", layout="wide")
 
 # Enhanced CSS
 st.markdown("""
@@ -369,7 +369,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Vedic Astrology Chart Generator")
+st.title("Sivapathy Astrology Data Generator")
 
 # Initialize session state
 if 'chart_data' not in st.session_state:
@@ -693,4 +693,4 @@ else:
     st.info("Enter details above and click 'Generate Chart' to begin")
 
 st.markdown("---")
-st.caption("Vedic Astrology Chart Generator")
+st.caption("Sivapathy Astrology Data Generator")
