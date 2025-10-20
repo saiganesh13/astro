@@ -105,8 +105,8 @@ def generate_periods(start_date, lord_idx, total_years, level='dasa', max_depth=
     i = lord_idx
     current_start = start_date
     total_cycle = 120
-    depth_dict = {'dasa':0, 'bhukti':1, 'anthara':2, 'sukshma':3, 'prana':4}
-    level_to_next = {0:'bhukti',1:'anthara',2:'sukshma',3:'prana',4:None}
+    depth_dict = {'dasa':0, 'bhukti':1, 'anthara':2, 'sukshma':3, 'prana':4, 'sub_prana':5}
+    level_to_next = {0:'bhukti',1:'anthara',2:'sukshma',3:'prana',4:'sub_prana',5:None}
     depth = depth_dict.get(level, 0)
     while remaining > 0:
         lord = lords_full[i]
@@ -250,7 +250,8 @@ def compute_chart(date_text, time_text, ampm, lat, lon, tz_offset, max_depth):
     dasa_periods_filtered = filter_from_birth(dasa_periods, utc_dt)
 
     max_depth_options = {1: 'Dasa only', 2: 'Dasa + Bhukti', 3: 'Dasa + Bhukti + Anthara', 
-                         4: 'Dasa + Bhukti + Anthara + Sukshma', 5: 'Dasa + Bhukti + Anthara + Sukshma + Prana'}
+                         4: 'Dasa + Bhukti + Anthara + Sukshma', 5: 'Dasa + Bhukti + Anthara + Sukshma + Prana',
+                         6: 'Dasa + Bhukti + Anthara + Sukshma + Prana + Sub-Prana'}
     selected_depth = max_depth_options[max_depth]
 
     lagna_sign = get_sign(lagna_sid)
@@ -387,7 +388,8 @@ with col2:
 col3, col4 = st.columns(2)
 with col3:
     max_depth_options = {1: 'Dasa only', 2: 'Dasa + Bhukti', 3: 'Dasa + Bhukti + Anthara', 
-                         4: 'Dasa + Bhukti + Anthara + Sukshma', 5: 'Dasa + Bhukti + Anthara + Sukshma + Prana'}
+                         4: 'Dasa + Bhukti + Anthara + Sukshma', 5: 'Dasa + Bhukti + Anthara + Sukshma + Prana',
+                         6: 'Dasa + Bhukti + Anthara + Sukshma + Prana + Sub-Prana'}
     selected_depth_str = st.selectbox("Select max depth for periods:", options=list(max_depth_options.values()), index=2)
     max_depth = list(max_depth_options.keys())[list(max_depth_options.values()).index(selected_depth_str)]
 
@@ -484,6 +486,21 @@ if st.session_state.chart_data:
                                                         prana_data.append({'Planet': pr_lord, 'Start': pr_start.strftime('%Y-%m-%d %H:%M'), 'End': pr_end.strftime('%Y-%m-%d %H:%M'), 'Duration': duration_str(dur)})
                                                     df_prana = pd.DataFrame(prana_data)
                                                     st.table(df_prana)
+
+                                                    if max_depth >= 6:
+                                                        with st.expander("Sub-Pranas (Select Prana to view)"):
+                                                            if pranas:
+                                                                prana_options = {m: f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" for m, p in enumerate(pranas)}
+                                                                selected_prana_idx = st.selectbox("Select Prana:", options=list(prana_options.values()), index=0, format_func=lambda x: x)
+                                                                sel_pr_idx = list(prana_options.keys())[list(prana_options.values()).index(selected_prana_idx)]
+                                                                selected_prana_period = pranas[sel_pr_idx]
+                                                                sub_pranas = selected_prana_period[3]
+                                                                sub_prana_data = []
+                                                                for sp_lord, sp_start, sp_end, _ in sub_pranas:
+                                                                    dur = sp_end - sp_start
+                                                                    sub_prana_data.append({'Planet': sp_lord, 'Start': sp_start.strftime('%Y-%m-%d %H:%M'), 'End': sp_end.strftime('%Y-%m-%d %H:%M'), 'Duration': duration_str(dur)})
+                                                                df_sub_prana = pd.DataFrame(sub_prana_data)
+                                                                st.table(df_sub_prana)
     st.info("Note: Periods filtered from birth. Durations approximate. Deeper levels use nested expanders for navigation.")
 else:
     st.info("Enter details and click 'Generate Chart' to begin.")
