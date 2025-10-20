@@ -7,6 +7,7 @@ from collections import defaultdict
 import pandas as pd
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
+import matplotlib.pyplot as plt
 
 # Note: Install required packages: pip install streamlit astropy geopy pandas
 
@@ -315,6 +316,110 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         'max_depth': max_depth
     }
 
+def display_box(sign, sign_to_planets, sign_to_house, lagna_sign):
+    pls = sign_to_planets.get(sign, 'Empty')
+    if pls == 'Empty':
+        pls = ''
+    house = sign_to_house[sign]
+    if sign == lagna_sign:
+        header = f"{sign} (Lagna)"
+        style = "border-color: red; background-color: #fff5f5;"
+    else:
+        header = sign
+        style = ""
+    st.markdown(f"""
+    <div style="border: 2px solid #125336; padding: 10px; margin: 5px; text-align: center; background-color: #f0f7f4; {style}">
+        <strong>{header}</strong><br>
+        H{house}<br>
+        {pls}
+    </div>
+    """, unsafe_allow_html=True)
+
+def display_south_indian(df, lagna_deg, lagna_sign):
+    lagna_sign_idx = int(lagna_deg / 30)
+    sign_to_house = {}
+    for s_idx in range(12):
+        h = ((s_idx - lagna_sign_idx) % 12) + 1
+        sign = sign_names[s_idx]
+        sign_to_house[sign] = h
+    sign_to_planets = {row['Sign']: row['Planets'] for _, row in df.iterrows()}
+    
+    # Row 1: Aquarius, Pisces, Aries
+    cols = st.columns(3)
+    for i, sign in enumerate(['Aquarius', 'Pisces', 'Aries']):
+        with cols[i]:
+            display_box(sign, sign_to_planets, sign_to_house, lagna_sign)
+    
+    # Row 2: Capricorn (left), empty (mid), Taurus (right)
+    cols = st.columns(3)
+    with cols[0]:
+        display_box('Capricorn', sign_to_planets, sign_to_house, lagna_sign)
+    # cols[1] remains empty
+    with cols[2]:
+        display_box('Taurus', sign_to_planets, sign_to_house, lagna_sign)
+    
+    # Row 3: Sagittarius, Scorpio, Gemini
+    cols = st.columns(3)
+    for i, sign in enumerate(['Sagittarius', 'Scorpio', 'Gemini']):
+        with cols[i]:
+            display_box(sign, sign_to_planets, sign_to_house, lagna_sign)
+    
+    # Row 4: Libra, Virgo, Leo, Cancer
+    cols = st.columns(4)
+    for i, sign in enumerate(['Libra', 'Virgo', 'Leo', 'Cancer']):
+        with cols[i]:
+            display_box(sign, sign_to_planets, sign_to_house, lagna_sign)
+
+def plot_north_indian(df, lagna_deg):
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ax.set_aspect('equal')
+    ax.set_xlim(-1.5, 1.5)
+    ax.set_ylim(-1.5, 1.5)
+    
+    # Draw basic diamond structure
+    diamond_x = [-1, 0, 1, 0, -1]
+    diamond_y = [0, 1, 0, -1, 0]
+    ax.plot(diamond_x, diamond_y, 'k-', linewidth=2)
+    
+    # Inner divisions (approximate)
+    ax.plot([0, 0], [1, -1], 'k-', linewidth=1)
+    ax.plot([-1, 1], [0, 0], 'k-', linewidth=1)
+    ax.plot([-0.7, 0, 0.7], [0.3, 1, 0.3], 'k-', linewidth=1)
+    ax.plot([-0.7, 0, 0.7], [-0.3, -1, -0.3], 'k-', linewidth=1)
+    ax.plot([-1, -0.3, -0.3], [0, 0.7, -0.7], 'k-', linewidth=1)
+    ax.plot([1, 0.3, 0.3], [0, -0.7, 0.7], 'k-', linewidth=1)
+    
+    house_positions = {
+        1: (0, 0.8),
+        2: (-0.8, 0.4),
+        3: (-1.0, 0),
+        4: (-0.8, -0.4),
+        5: (0, -0.8),
+        6: (0.8, -0.4),
+        7: (1.0, 0),
+        8: (0.8, 0.4),
+        9: (0.4, 0.6),
+        10: (0.8, 0.2),
+        11: (-0.4, 0.6),
+        12: (-0.8, 0.2),
+    }
+    
+    for _, row in df.iterrows():
+        h_str = row['House']
+        h = int(h_str.split()[-1])
+        sign = row['Sign']
+        pls = row['Planets'] if row['Planets'] != 'Empty' else ''
+        pos = house_positions[h]
+        text = f"{h}\n{sign}\n{pls}"
+        color = 'lightyellow' if h == 1 else 'lightblue'
+        ax.text(pos[0], pos[1], text, ha='center', va='center', fontsize=9,
+                bbox=dict(boxstyle="round,pad=0.3", facecolor=color, alpha=0.7))
+    
+    ax.set_title('North Indian Style Chart')
+    ax.axis('off')
+    plt.tight_layout()
+    st.pyplot(fig)
+
 # Streamlit UI
 st.set_page_config(page_title="Sivapathy Horoscope", layout="wide")
 
@@ -509,6 +614,9 @@ selected_depth_str = st.selectbox(
 )
 max_depth = list(max_depth_options.keys())[list(max_depth_options.values()).index(selected_depth_str)]
 
+# Chart style selector
+chart_style = st.selectbox("Chart Style", ["Table", "North Indian", "South Indian"], index=0)
+
 # Generate button
 if st.button("Generate Chart", use_container_width=True):
     if not name:
@@ -551,7 +659,12 @@ if st.session_state.chart_data:
     
     # Rasi Chart
     st.subheader("Rasi Chart (D1)")
-    st.dataframe(chart_data['df_rasi'], hide_index=True, use_container_width=True)
+    if chart_style == "Table":
+        st.dataframe(chart_data['df_rasi'], hide_index=True, use_container_width=True)
+    elif chart_style == "North Indian":
+        plot_north_indian(chart_data['df_rasi'], chart_data['lagna_sid'])
+    elif chart_style == "South Indian":
+        display_south_indian(chart_data['df_rasi'], chart_data['lagna_sid'], chart_data['lagna_sign'])
     
     # House Status
     st.subheader("House Analysis")
@@ -560,7 +673,12 @@ if st.session_state.chart_data:
     # Navamsa Chart
     st.subheader("Navamsa Chart (D9)")
     st.write(f"Navamsa Lagna: {chart_data['nav_lagna_sign']} ({chart_data['nav_lagna']:.2f}°)")
-    st.dataframe(chart_data['df_nav'], hide_index=True, use_container_width=True)
+    if chart_style == "Table":
+        st.dataframe(chart_data['df_nav'], hide_index=True, use_container_width=True)
+    elif chart_style == "North Indian":
+        plot_north_indian(chart_data['df_nav'], chart_data['nav_lagna'])
+    elif chart_style == "South Indian":
+        display_south_indian(chart_data['df_nav'], chart_data['nav_lagna'], chart_data['nav_lagna_sign'])
     
     # Vimshottari Dasa
     st.subheader(f"Vimshottari Dasa ({chart_data['selected_depth']})")
