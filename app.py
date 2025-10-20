@@ -156,6 +156,213 @@ def duration_str(delta, level='dasa'):
             return "Less than 1 day"
         return f"{years}y {months}m {days}d"
 
+def create_south_indian_chart(house_planets, chart_type='Rasi'):
+    """Create South Indian style chart HTML"""
+    chart_html = f"""
+    <style>
+        .si-chart {{
+            display: grid;
+            grid-template-columns: repeat(4, 150px);
+            grid-template-rows: repeat(4, 150px);
+            gap: 0;
+            margin: 20px auto;
+            width: fit-content;
+            border: 2px solid #125336;
+        }}
+        .si-house {{
+            border: 1px solid #125336;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 8px;
+            font-size: 11px;
+            background: white;
+            position: relative;
+        }}
+        .si-house-num {{
+            position: absolute;
+            top: 3px;
+            left: 5px;
+            font-size: 9px;
+            color: #666;
+            font-weight: bold;
+        }}
+        .si-planets {{
+            text-align: center;
+            color: #125336;
+            font-weight: 500;
+            word-wrap: break-word;
+            max-width: 130px;
+        }}
+        .si-chart-title {{
+            text-align: center;
+            font-size: 16px;
+            font-weight: bold;
+            color: #125336;
+            margin-bottom: 10px;
+        }}
+    </style>
+    <div class="si-chart-title">{chart_type} Chart - South Indian Style</div>
+    <div class="si-chart">
+    """
+    
+    # South Indian layout: houses are in fixed positions
+    # Layout pattern:
+    #  12  1  2  3
+    #  11     |  4
+    #  10     |  5
+    #   9  8  7  6
+    
+    layout = [12, 1, 2, 3, 11, None, None, 4, 10, None, None, 5, 9, 8, 7, 6]
+    
+    for i, house_num in enumerate(layout):
+        if house_num is None:
+            chart_html += '<div class="si-house" style="background: #f8f9fa; border: none;"></div>'
+        else:
+            planets = house_planets.get(house_num, [])
+            planet_text = '<br>'.join(planets) if planets else ''
+            chart_html += f'''
+            <div class="si-house">
+                <span class="si-house-num">{house_num}</span>
+                <div class="si-planets">{planet_text}</div>
+            </div>
+            '''
+    
+    chart_html += "</div>"
+    return chart_html
+
+def create_north_indian_chart(house_planets, lagna_sign, chart_type='Rasi'):
+    """Create North Indian style chart HTML"""
+    
+    # In North Indian chart, signs are fixed, ascendant determines which house is which
+    sign_positions = {
+        'Aries': 0, 'Taurus': 1, 'Gemini': 2, 'Cancer': 3,
+        'Leo': 4, 'Virgo': 5, 'Libra': 6, 'Scorpio': 7,
+        'Sagittarius': 8, 'Capricorn': 9, 'Aquarius': 10, 'Pisces': 11
+    }
+    
+    # Diamond layout positions (12 houses in diamond shape)
+    # Position mapping for North Indian chart
+    #        0
+    #     11   1
+    #  10   X    2
+    #     9    3
+    #   8    4
+    #     7  5
+    #       6
+    
+    chart_html = f"""
+    <style>
+        .ni-chart {{
+            display: grid;
+            grid-template-columns: repeat(7, 80px);
+            grid-template-rows: repeat(7, 80px);
+            gap: 0;
+            margin: 20px auto;
+            width: fit-content;
+        }}
+        .ni-house {{
+            border: 1px solid #125336;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 5px;
+            font-size: 10px;
+            background: white;
+            position: relative;
+        }}
+        .ni-house-num {{
+            position: absolute;
+            top: 2px;
+            left: 3px;
+            font-size: 8px;
+            color: #666;
+            font-weight: bold;
+        }}
+        .ni-sign {{
+            position: absolute;
+            top: 2px;
+            right: 3px;
+            font-size: 7px;
+            color: #888;
+        }}
+        .ni-planets {{
+            text-align: center;
+            color: #125336;
+            font-weight: 500;
+            font-size: 9px;
+            word-wrap: break-word;
+            max-width: 70px;
+        }}
+        .ni-empty {{
+            background: transparent;
+            border: none;
+        }}
+        .ni-chart-title {{
+            text-align: center;
+            font-size: 16px;
+            font-weight: bold;
+            color: #125336;
+            margin-bottom: 10px;
+        }}
+        .ni-center {{
+            border: 2px solid #125336;
+            background: #f0f7f4;
+            font-weight: bold;
+            color: #125336;
+        }}
+    </style>
+    <div class="ni-chart-title">{chart_type} Chart - North Indian Style</div>
+    <div class="ni-chart">
+    """
+    
+    # North Indian diamond layout
+    grid = [[None for _ in range(7)] for _ in range(7)]
+    
+    # Map houses to grid positions
+    house_grid_map = {
+        12: (0, 3), 1: (1, 4), 2: (2, 5), 3: (3, 6),
+        11: (1, 2), 4: (3, 5), 
+        10: (2, 1), 5: (4, 6),
+        9: (3, 2), 6: (5, 5),
+        8: (4, 1), 7: (5, 4),
+        'center1': (3, 3), 'center2': (4, 3), 'center3': (3, 4), 'center4': (4, 4)
+    }
+    
+    # Place houses in grid
+    for house_num in range(1, 13):
+        row, col = house_grid_map[house_num]
+        sign_idx = (sign_positions[lagna_sign] + house_num - 1) % 12
+        sign = sign_names[sign_idx]
+        planets = house_planets.get(house_num, [])
+        planet_text = '<br>'.join(planets) if planets else ''
+        grid[row][col] = f'''
+        <div class="ni-house">
+            <span class="ni-house-num">{house_num}</span>
+            <span class="ni-sign">{sign[:3]}</span>
+            <div class="ni-planets">{planet_text}</div>
+        </div>
+        '''
+    
+    # Add center
+    grid[3][3] = '<div class="ni-house ni-center">Asc<br>' + lagna_sign[:3] + '</div>'
+    
+    # Fill empty spaces
+    for i in range(7):
+        for j in range(7):
+            if grid[i][j] is None:
+                grid[i][j] = '<div class="ni-empty"></div>'
+    
+    # Render grid
+    for row in grid:
+        for cell in row:
+            chart_html += cell
+    
+    chart_html += "</div>"
+    return chart_html
+
 def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     # Parse time string HH:MM
     try:
@@ -310,6 +517,8 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         'moon_rasi': get_sign(moon_lon),
         'moon_nakshatra': moon_nak,
         'moon_pada': moon_pada,
+        'house_planets_rasi': dict(house_planets_rasi),
+        'house_planets_nav': dict(house_planets_nav),
         'selected_depth': selected_depth,
         'utc_dt': utc_dt,
         'max_depth': max_depth
@@ -378,6 +587,8 @@ if 'location_data' not in st.session_state:
     st.session_state.location_data = None
 if 'search_results' not in st.session_state:
     st.session_state.search_results = []
+if 'chart_style' not in st.session_state:
+    st.session_state.chart_style = 'South Indian'
 
 # Initialize geolocator
 @st.cache_resource
@@ -494,20 +705,29 @@ else:
         st.info("Using default location: Chennai, India")
 
 # Dasa depth selector
-max_depth_options = {
-    1: 'Dasa only',
-    2: 'Dasa + Bhukti',
-    3: 'Dasa + Bhukti + Anthara',
-    4: 'Dasa + Bhukti + Anthara + Sukshma',
-    5: 'Dasa + Bhukti + Anthara + Sukshma + Prana',
-    6: 'Dasa + Bhukti + Anthara + Sukshma + Prana + Sub-Prana'
-}
-selected_depth_str = st.selectbox(
-    "Period Depth",
-    options=list(max_depth_options.values()),
-    index=2
-)
-max_depth = list(max_depth_options.keys())[list(max_depth_options.values()).index(selected_depth_str)]
+col_depth, col_style = st.columns(2)
+with col_depth:
+    max_depth_options = {
+        1: 'Dasa only',
+        2: 'Dasa + Bhukti',
+        3: 'Dasa + Bhukti + Anthara',
+        4: 'Dasa + Bhukti + Anthara + Sukshma',
+        5: 'Dasa + Bhukti + Anthara + Sukshma + Prana',
+        6: 'Dasa + Bhukti + Anthara + Sukshma + Prana + Sub-Prana'
+    }
+    selected_depth_str = st.selectbox(
+        "Period Depth",
+        options=list(max_depth_options.values()),
+        index=2
+    )
+    max_depth = list(max_depth_options.keys())[list(max_depth_options.values()).index(selected_depth_str)]
+
+with col_style:
+    chart_style = st.selectbox(
+        "Chart Style",
+        options=["South Indian", "North Indian"],
+        index=0
+    )
 
 # Generate button
 if st.button("Generate Chart", use_container_width=True):
@@ -521,6 +741,7 @@ if st.button("Generate Chart", use_container_width=True):
                 st.session_state.chart_data = compute_chart(
                     name, birth_date, birth_time, lat, lon, tz_offset, max_depth
                 )
+                st.session_state.chart_style = chart_style
             st.success("Chart generated successfully!")
             st.rerun()
         except ValueError as e:
@@ -531,6 +752,7 @@ if st.button("Generate Chart", use_container_width=True):
 # Display results
 if st.session_state.chart_data:
     chart_data = st.session_state.chart_data
+    chart_style = st.session_state.get('chart_style', 'South Indian')
     
     st.markdown("---")
     
@@ -549,18 +771,32 @@ if st.session_state.chart_data:
     st.subheader("Planetary Positions")
     st.dataframe(chart_data['df_planets'], hide_index=True, use_container_width=True)
     
-    # Rasi Chart
+    # Rasi Chart - Visual
     st.subheader("Rasi Chart (D1)")
-    st.dataframe(chart_data['df_rasi'], hide_index=True, use_container_width=True)
+    if chart_style == "South Indian":
+        rasi_chart_html = create_south_indian_chart(chart_data['house_planets_rasi'], 'Rasi')
+    else:
+        rasi_chart_html = create_north_indian_chart(chart_data['house_planets_rasi'], chart_data['lagna_sign'], 'Rasi')
+    st.markdown(rasi_chart_html, unsafe_allow_html=True)
+    
+    with st.expander("View Rasi Chart as Table"):
+        st.dataframe(chart_data['df_rasi'], hide_index=True, use_container_width=True)
     
     # House Status
     st.subheader("House Analysis")
     st.dataframe(chart_data['df_house_status'], hide_index=True, use_container_width=True)
     
-    # Navamsa Chart
+    # Navamsa Chart - Visual
     st.subheader("Navamsa Chart (D9)")
-    st.write(f"Navamsa Lagna: {chart_data['nav_lagna_sign']} ({chart_data['nav_lagna']:.2f}°)")
-    st.dataframe(chart_data['df_nav'], hide_index=True, use_container_width=True)
+    if chart_style == "South Indian":
+        nav_chart_html = create_south_indian_chart(chart_data['house_planets_nav'], 'Navamsa')
+    else:
+        nav_chart_html = create_north_indian_chart(chart_data['house_planets_nav'], chart_data['nav_lagna_sign'], 'Navamsa')
+    st.markdown(nav_chart_html, unsafe_allow_html=True)
+    
+    with st.expander("View Navamsa Chart as Table"):
+        st.write(f"Navamsa Lagna: {chart_data['nav_lagna_sign']} ({chart_data['nav_lagna']:.2f}°)")
+        st.dataframe(chart_data['df_nav'], hide_index=True, use_container_width=True)
     
     # Vimshottari Dasa
     st.subheader(f"Vimshottari Dasa ({chart_data['selected_depth']})")
