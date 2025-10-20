@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime, timedelta, time as datetime_time
+from datetime import datetime, timedelta
 from math import sin, cos, tan, atan2, degrees, radians
 from astropy.time import Time
 from astropy.coordinates import get_body, solar_system_ephemeris, GeocentricTrueEcliptic
@@ -156,8 +156,18 @@ def duration_str(delta, level='dasa'):
             return "Less than 1 day"
         return f"{years}y {months}m {days}d"
 
-def compute_chart(date_obj, time_obj, lat, lon, tz_offset, max_depth):
-    local_dt = datetime.combine(date_obj, time_obj)
+def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
+    # Parse time string HH:MM
+    try:
+        time_parts = time_str.split(':')
+        hour = int(time_parts[0])
+        minute = int(time_parts[1]) if len(time_parts) > 1 else 0
+        if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+            raise ValueError("Invalid time format")
+    except:
+        raise ValueError("Time must be in HH:MM format (24-hour)")
+    
+    local_dt = datetime.combine(date_obj, datetime.min.time().replace(hour=hour, minute=minute))
     utc_dt = local_dt - timedelta(hours=tz_offset)
     t = Time(utc_dt)
     jd = t.jd
@@ -175,10 +185,10 @@ def compute_chart(date_obj, time_obj, lat, lon, tz_offset, max_depth):
             'saturn': 'saturn'
         }
         lon_trop = {}
-        for name, body in planet_bodies.items():
+        for name_p, body in planet_bodies.items():
             p = get_body(body, t)
             ecl = p.transform_to(GeocentricTrueEcliptic())
-            lon_trop[name] = ecl.lon.deg
+            lon_trop[name_p] = ecl.lon.deg
 
     d = jd - 2451545.0
     T = d / 36525.0
@@ -282,8 +292,12 @@ def compute_chart(date_obj, time_obj, lat, lon, tz_offset, max_depth):
     selected_depth = max_depth_options[max_depth]
 
     nav_lagna_sign = get_sign(nav_lagna)
+    
+    # Moon nakshatra for summary
+    moon_nak, moon_pada, moon_ld, moon_sl = get_nakshatra_details(moon_lon)
 
     return {
+        'name': name,
         'df_planets': df_planets,
         'df_rasi': df_rasi,
         'df_nav': df_nav,
@@ -293,6 +307,8 @@ def compute_chart(date_obj, time_obj, lat, lon, tz_offset, max_depth):
         'nav_lagna': nav_lagna,
         'lagna_sign': lagna_sign,
         'nav_lagna_sign': nav_lagna_sign,
+        'moon_rasi': get_sign(moon_lon),
+        'moon_nakshatra': moon_nak,
         'selected_depth': selected_depth,
         'utc_dt': utc_dt,
         'max_depth': max_depth
@@ -330,29 +346,37 @@ st.markdown("""
     h1, h2, h3 {
         color: #125336 !important;
     }
-    .input-section {
-        background-color: #f8f9fa;
+    .summary-box {
+        background-color: #f0f7f4;
         padding: 1.5rem;
         border-radius: 10px;
-        border: 1px solid #e0e0e0;
-        margin-bottom: 1rem;
+        border: 2px solid #125336;
+        margin: 1.5rem 0;
     }
-    .stDataFrame {
-        border: 1px solid #e0e0e0;
-        border-radius: 5px;
+    .summary-box h3 {
+        margin-top: 0;
+        color: #125336 !important;
+    }
+    .summary-item {
+        font-size: 1.1rem;
+        margin: 0.5rem 0;
+        color: #125336;
+    }
+    div[data-testid="stVerticalBlock"] > div:first-child {
+        padding-top: 0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Sivapathy Horoscope Astrology Chart Generator")
+st.title("Vedic Astrology Chart Generator")
 
 # Initialize session state
 if 'chart_data' not in st.session_state:
     st.session_state.chart_data = None
 if 'location_data' not in st.session_state:
     st.session_state.location_data = None
-if 'city_query' not in st.session_state:
-    st.session_state.city_query = ''
+if 'search_results' not in st.session_state:
+    st.session_state.search_results = []
 
 # Initialize geolocator
 @st.cache_resource
@@ -363,98 +387,106 @@ def get_geolocator():
 geocode = get_geolocator()
 
 # Input Section
-st.markdown('<div class="input-section">', unsafe_allow_html=True)
 st.subheader("Birth Details")
 
-col1, col2, col3 = st.columns([2, 2, 1])
+# Name input
+name = st.text_input("Name", placeholder="Enter full name")
+
+col1, col2, col3 = st.columns(3)
 
 with col1:
-    # Calendar date picker
     birth_date = st.date_input(
         "Birth Date",
         value=datetime.now().date(),
         min_value=datetime(1900, 1, 1).date(),
-        max_value=datetime.now().date(),
-        help="Select your birth date"
+        max_value=datetime.now().date()
     )
 
 with col2:
-    # Time picker
-    birth_time = st.time_input(
-        "Birth Time",
-        value=datetime_time(12, 0),
-        help="Select your birth time"
+    birth_time = st.text_input(
+        "Birth Time (HH:MM in 24-hour format)",
+        placeholder="14:30",
+        help="Example: 14:30 for 2:30 PM"
     )
 
 with col3:
     tz_offset = st.number_input(
-        "Timezone (hrs)",
+        "Timezone offset (hrs)",
         value=5.5,
         step=0.5,
         help="Offset from UTC (e.g., IST = 5.5)"
     )
 
-# City search with real-time results
-st.subheader(" Birth Location")
+# Custom coordinates checkbox
+use_custom_coords = st.checkbox("Custom latitude and longitude?")
 
-city_query = st.text_input(
-    "Search City",
-    value=st.session_state.city_query,
-    placeholder="Start typing city name...",
-    help="Search for your birth city"
-)
-
-# Real-time city search
-location_data = None
-if city_query and city_query != st.session_state.city_query:
-    st.session_state.city_query = city_query
-    with st.spinner("Searching locations..."):
-        try:
-            locations = geocode(city_query, exactly_one=False, limit=5)
-            if locations:
-                st.session_state.locations = locations
-            else:
-                city_key = city_query.title()
-                if city_key in cities_fallback:
-                    st.session_state.location_data = cities_fallback[city_key]
-                    st.info(f"✓ Using fallback: {city_key}")
-        except Exception as e:
-            city_key = city_query.title()
-            if city_key in cities_fallback:
-                st.session_state.location_data = cities_fallback[city_key]
-                st.info(f"✓ Using fallback: {city_key}")
-
-# Display location options
-if hasattr(st.session_state, 'locations') and st.session_state.locations:
-    location_options = [f"{loc.address}" for loc in st.session_state.locations]
-    selected_location_str = st.selectbox(
-        "Select from results",
-        options=location_options,
-        help="Choose the correct location from search results"
-    )
-    selected_idx = location_options.index(selected_location_str)
-    selected_location = st.session_state.locations[selected_idx]
-    st.session_state.location_data = {
-        'lat': selected_location.latitude,
-        'lon': selected_location.longitude,
-        'address': selected_location.address
-    }
-    st.success(f" {selected_location.address}")
-
-# Display selected location
-if st.session_state.location_data:
-    location_data = st.session_state.location_data
-    lat = location_data['lat']
-    lon = location_data['lon']
+if use_custom_coords:
     col_lat, col_lon = st.columns(2)
     with col_lat:
-        st.metric("Latitude", f"{lat:.4f}°")
+        lat = st.number_input("Latitude", value=13.08, format="%.4f")
     with col_lon:
-        st.metric("Longitude", f"{lon:.4f}°")
+        lon = st.number_input("Longitude", value=80.27, format="%.4f")
+    location_data = {'lat': lat, 'lon': lon}
 else:
-    lat, lon = 13.08, 80.27
-    st.warning("⚠️ Using default: Chennai, India")
-    st.metric("Coordinates", f"{lat:.2f}°N, {lon:.2f}°E")
+    # City search with autocomplete
+    def search_city():
+        query = st.session_state.city_input
+        if query and len(query) >= 2:
+            try:
+                locations = geocode(query, exactly_one=False, limit=5)
+                if locations:
+                    st.session_state.search_results = [
+                        {
+                            'display': f"{loc.address}",
+                            'lat': loc.latitude,
+                            'lon': loc.longitude,
+                            'address': loc.address
+                        }
+                        for loc in locations
+                    ]
+                else:
+                    city_key = query.title()
+                    if city_key in cities_fallback:
+                        st.session_state.search_results = [{
+                            'display': f"{city_key} (Fallback)",
+                            'lat': cities_fallback[city_key]['lat'],
+                            'lon': cities_fallback[city_key]['lon'],
+                            'address': city_key
+                        }]
+            except:
+                city_key = query.title()
+                if city_key in cities_fallback:
+                    st.session_state.search_results = [{
+                        'display': f"{city_key} (Fallback)",
+                        'lat': cities_fallback[city_key]['lat'],
+                        'lon': cities_fallback[city_key]['lon'],
+                        'address': city_key
+                    }]
+    
+    city_query = st.text_input(
+        "Search City",
+        placeholder="Start typing city name...",
+        key="city_input",
+        on_change=search_city
+    )
+    
+    # Show search results
+    if st.session_state.search_results:
+        result_options = [r['display'] for r in st.session_state.search_results]
+        selected = st.selectbox(
+            "Select location",
+            options=result_options,
+            key="location_selector"
+        )
+        selected_idx = result_options.index(selected)
+        location_data = st.session_state.search_results[selected_idx]
+        lat = location_data['lat']
+        lon = location_data['lon']
+        st.success(f"Selected: {location_data['address']} (Lat: {lat:.2f}, Lon: {lon:.2f})")
+    else:
+        lat, lon = 13.08, 80.27
+        location_data = {'lat': lat, 'lon': lon}
+        st.info("Using default location: Chennai, India")
 
 # Dasa depth selector
 max_depth_options = {
@@ -468,22 +500,28 @@ max_depth_options = {
 selected_depth_str = st.selectbox(
     "Period Depth",
     options=list(max_depth_options.values()),
-    index=2,
-    help="Select how deep to calculate periods"
+    index=2
 )
 max_depth = list(max_depth_options.keys())[list(max_depth_options.values()).index(selected_depth_str)]
 
-st.markdown('</div>', unsafe_allow_html=True)
-
 # Generate button
 if st.button("Generate Chart", use_container_width=True):
-    try:
-        with st.spinner("Calculating chart..."):
-            st.session_state.chart_data = compute_chart(birth_date, birth_time, lat, lon, tz_offset, max_depth)
-        st.success("✓ Chart generated successfully!")
-        st.rerun()
-    except Exception as e:
-        st.error(f"Error generating chart: {e}")
+    if not name:
+        st.error("Please enter a name.")
+    elif not birth_time:
+        st.error("Please enter birth time in HH:MM format.")
+    else:
+        try:
+            with st.spinner("Calculating chart..."):
+                st.session_state.chart_data = compute_chart(
+                    name, birth_date, birth_time, lat, lon, tz_offset, max_depth
+                )
+            st.success("Chart generated successfully!")
+            st.rerun()
+        except ValueError as e:
+            st.error(f"Invalid input: {e}")
+        except Exception as e:
+            st.error(f"Error generating chart: {e}")
 
 # Display results
 if st.session_state.chart_data:
@@ -491,39 +529,33 @@ if st.session_state.chart_data:
     
     st.markdown("---")
     
+    # Summary Box - First thing displayed
+    st.markdown(f"""
+    <div class="summary-box">
+        <h3>Chart Summary</h3>
+        <div class="summary-item"><strong>Name:</strong> {chart_data['name']}</div>
+        <div class="summary-item"><strong>Lagna:</strong> {chart_data['lagna_sign']} ({chart_data['lagna_sid']:.2f}°)</div>
+        <div class="summary-item"><strong>Rasi (Moon Sign):</strong> {chart_data['moon_rasi']}</div>
+        <div class="summary-item"><strong>Nakshatra:</strong> {chart_data['moon_nakshatra']}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
     # Planetary Details
     st.subheader("Planetary Positions")
-    st.dataframe(
-        chart_data['df_planets'],
-        hide_index=True,
-        use_container_width=True
-    )
+    st.table(chart_data['df_planets'])
     
     # Rasi Chart
     st.subheader("Rasi Chart (D1)")
-    st.info(f"**Lagna:** {chart_data['lagna_sign']} ({chart_data['lagna_sid']:.2f}°)")
-    st.dataframe(
-        chart_data['df_rasi'],
-        hide_index=True,
-        use_container_width=True
-    )
+    st.table(chart_data['df_rasi'])
     
     # House Status
-    st.subheader("🔍 House Analysis")
-    st.dataframe(
-        chart_data['df_house_status'],
-        hide_index=True,
-        use_container_width=True
-    )
+    st.subheader("House Analysis")
+    st.table(chart_data['df_house_status'])
     
     # Navamsa Chart
     st.subheader("Navamsa Chart (D9)")
-    st.info(f"**Navamsa Lagna:** {chart_data['nav_lagna_sign']} ({chart_data['nav_lagna']:.2f}°)")
-    st.dataframe(
-        chart_data['df_nav'],
-        hide_index=True,
-        use_container_width=True
-    )
+    st.write(f"Navamsa Lagna: {chart_data['nav_lagna_sign']} ({chart_data['nav_lagna']:.2f}°)")
+    st.table(chart_data['df_nav'])
     
     # Vimshottari Dasa
     st.subheader(f"Vimshottari Dasa ({chart_data['selected_depth']})")
@@ -543,7 +575,7 @@ if st.session_state.chart_data:
             'Duration': duration_str(dur, 'dasa')
         })
     df_dasa = pd.DataFrame(dasa_data)
-    st.dataframe(df_dasa, hide_index=True, use_container_width=True)
+    st.table(df_dasa)
     
     # Nested periods with expanders
     if max_depth >= 2:
@@ -565,7 +597,7 @@ if st.session_state.chart_data:
                         'Duration': duration_str(dur, 'bhukti')
                     })
                 df_bhukti = pd.DataFrame(bhukti_data)
-                st.dataframe(df_bhukti, hide_index=True, use_container_width=True)
+                st.table(df_bhukti)
                 
                 if max_depth >= 3:
                     with st.expander("View Antharas", expanded=False):
@@ -586,7 +618,7 @@ if st.session_state.chart_data:
                                     'Duration': duration_str(dur, 'anthara')
                                 })
                             df_anthara = pd.DataFrame(anthara_data)
-                            st.dataframe(df_anthara, hide_index=True, use_container_width=True)
+                            st.table(df_anthara)
                             
                             if max_depth >= 4:
                                 with st.expander("View Sukshmas", expanded=False):
@@ -607,7 +639,7 @@ if st.session_state.chart_data:
                                                 'Duration': duration_str(dur, 'sukshma')
                                             })
                                         df_sukshma = pd.DataFrame(sukshma_data)
-                                        st.dataframe(df_sukshma, hide_index=True, use_container_width=True)
+                                        st.table(df_sukshma)
                                         
                                         if max_depth >= 5:
                                             with st.expander("View Pranas", expanded=False):
@@ -628,10 +660,10 @@ if st.session_state.chart_data:
                                                             'Duration': duration_str(dur, 'prana')
                                                         })
                                                     df_prana = pd.DataFrame(prana_data)
-                                                    st.dataframe(df_prana, hide_index=True, use_container_width=True)
+                                                    st.table(df_prana)
                                                     
                                                     if max_depth >= 6:
-                                                        with st.expander("📊 View Sub-Pranas", expanded=False):
+                                                        with st.expander("View Sub-Pranas", expanded=False):
                                                             if pranas:
                                                                 prana_options = [f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" 
                                                                                for p in pranas]
@@ -649,11 +681,11 @@ if st.session_state.chart_data:
                                                                         'Duration': duration_str(dur, 'sub_prana')
                                                                     })
                                                                 df_sub_prana = pd.DataFrame(sub_prana_data)
-                                                                st.dataframe(df_sub_prana, hide_index=True, use_container_width=True)
+                                                                st.table(df_sub_prana)
     
-    st.info("Periods are calculated from birth. Durations are approximate.")
+    st.info("Note: Periods filtered from birth. Durations approximate.")
 else:
-    st.info("Enter your birth details above and click 'Generate Chart' to begin")
+    st.info("Enter details above and click 'Generate Chart' to begin")
 
 st.markdown("---")
-st.caption("Sivapathy Horoscope Chart Generator")
+st.caption("Vedic Astrology Chart Generator")
