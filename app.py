@@ -178,7 +178,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     with solar_system_ephemeris.set('builtin'):
         planet_bodies = {
             'sun': 'sun',
-            'moon': 'moon',
+            'moon': 'mercury',
             'mercury': 'mercury',
             'venus': 'venus',
             'mars': 'mars',
@@ -328,7 +328,7 @@ def display_box(sign, sign_to_planets, sign_to_house, lagna_sign):
         header = sign
         style = ""
     st.markdown(f"""
-    <div style="border: 2px solid #125336; padding: 10px; margin: 5px; text-align: center; background-color: #f0f7f4; {style}">
+    <div style="border: 2px solid #125336; padding: 15px; margin: 8px; text-align: center; background-color: #f0f7f4; {style} min-height: 100px; display: flex; flex-direction: column; justify-content: center;">
         <strong>{header}</strong><br>
         H{house}<br>
         {pls}
@@ -615,7 +615,7 @@ selected_depth_str = st.selectbox(
 max_depth = list(max_depth_options.keys())[list(max_depth_options.values()).index(selected_depth_str)]
 
 # Chart style selector
-chart_style = st.selectbox("Chart Style", ["Table", "North Indian", "South Indian"], index=0)
+chart_style = st.selectbox("Chart Style", ["Table", "North Indian", "South Indian"], index=2)
 
 # Generate button
 if st.button("Generate Chart", use_container_width=True):
