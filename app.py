@@ -6,6 +6,7 @@ from astropy.coordinates import get_body, solar_system_ephemeris, GeocentricTrue
 from collections import defaultdict
 import pandas as pd
 from geopy.geocoders import Nominatim
+from geopy.extra.rate_limiter import RateLimiter
 
 # Note: Install required packages: pip install streamlit astropy geopy pandas
 
@@ -129,11 +130,51 @@ def generate_periods(start_date, lord_idx, total_years, level='dasa', max_depth=
 # Streamlit UI
 st.title("Vedic Astrology Chart Generator")
 
+# Initialize geolocator with rate limiter
+geolocator = Nominatim(user_agent="vedic_astro_app")
+geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
+
 # Inputs
 date_text = st.text_input("Enter Date (DD:MM:YYYY):")
 time_text = st.text_input("Enter Time (HH:MM):")
 ampm = st.selectbox("AM/PM:", ["AM", "PM"])
-city_name = st.text_input("Enter City Name (for lat/lon lookup):")
+
+# City search with suggestions
+city_query = st.text_input("Enter City Name (for lat/lon lookup):")
+selected_location = None
+location_data = None
+if city_query:
+    try:
+        # Search for multiple locations
+        locations = geolocator.geocode(city_query, exactly_one=False, limit=5)
+        if locations:
+            location_options = [f"{loc.address} (Lat: {loc.latitude:.2f}, Lon: {loc.longitude:.2f})" for loc in locations]
+            selected_idx = st.selectbox("Select Location:", options=location_options, index=0, key="location_select")
+            selected_location = locations[location_options.index(selected_idx)]
+            location_data = {'lat': selected_location.latitude, 'lon': selected_location.longitude, 'address': selected_location.address}
+            st.success(f"Selected: {selected_location.address}")
+        else:
+            st.warning("No locations found. Trying fallback...")
+            city_key = city_query.title()
+            if city_key in cities_fallback:
+                location_data = cities_fallback[city_key]
+                st.info("Using fallback data.")
+    except Exception as e:
+        st.error(f"Geocoding error: {e}")
+        # Fallback
+        city_key = city_query.title()
+        if city_key in cities_fallback:
+            location_data = cities_fallback[city_key]
+            st.info("Using fallback data.")
+
+if location_data:
+    lat = location_data['lat']
+    lon = location_data['lon']
+else:
+    lat = 13.08  # Default Chennai
+    lon = 80.27
+    st.warning("Using default location: Chennai")
+
 tz_offset = st.number_input("Timezone offset (hours, e.g., 5.5 for IST):", value=5.5, step=0.5)
 max_depth_options = {1: 'Dasa only', 2: 'Dasa + Bhukti', 3: 'Dasa + Bhukti + Anthara', 
                      4: 'Dasa + Bhukti + Anthara + Sukshma', 5: 'Dasa + Bhukti + Anthara + Sukshma + Prana'}
@@ -146,23 +187,6 @@ if st.button("Generate Chart"):
         date_obj = datetime.strptime(date_text, '%d:%m:%Y')
         time_obj = datetime.strptime(time_text + ' ' + ampm, '%I:%M %p')
         local_dt = date_obj.replace(hour=time_obj.hour, minute=time_obj.minute, second=0, microsecond=0)
-
-        # Get lat/lon using geopy
-        geolocator = Nominatim(user_agent="vedic_astro_app")
-        location = geolocator.geocode(city_name)
-        if location:
-            lat = location.latitude
-            lon = location.longitude
-            st.success(f"Location: {location.address}")
-        else:
-            # Fallback to predefined if city in fallback
-            if city_name.title() in cities_fallback:
-                lat = cities_fallback[city_name.title()]['lat']
-                lon = cities_fallback[city_name.title()]['lon']
-                st.warning("Using fallback data. City not found via geocoder.")
-            else:
-                st.error("City not found. Please check spelling or use a known city.")
-                st.stop()
 
         utc_dt = local_dt - timedelta(hours=tz_offset)
         t = Time(utc_dt)
@@ -272,110 +296,133 @@ if st.button("Generate Chart"):
 
         # Filter periods from birth
         def filter_from_birth(periods, birth_dt):
-            return [(lord, max(start, birth_dt) if start < birth_dt else start, end, sub) for lord, start, end, sub in periods if end > birth_dt]
+            filtered = []
+            for lord, start, end, sub in periods:
+                if end > birth_dt:
+                    adj_start = max(start, birth_dt)
+                    adj_sub = filter_from_birth(sub, birth_dt) if sub else []
+                    filtered.append((lord, adj_start, end, adj_sub))
+            return filtered
 
         dasa_periods_filtered = filter_from_birth(dasa_periods, utc_dt)
 
-        # Nested dropdowns using session state
+        # Nested dropdowns with reset on parent change
         if 'selected_dasa_idx' not in st.session_state:
             st.session_state.selected_dasa_idx = 0
-        if 'selected_bhukti_idx' not in st.session_state:
             st.session_state.selected_bhukti_idx = 0
-        if 'selected_anthara_idx' not in st.session_state:
             st.session_state.selected_anthara_idx = 0
-        if 'selected_sukshma_idx' not in st.session_state:
             st.session_state.selected_sukshma_idx = 0
-        if 'selected_prana_idx' not in st.session_state:
             st.session_state.selected_prana_idx = 0
 
         # Dasa selection
-        dasa_options = [(p[0], i) for i, p in enumerate(dasa_periods_filtered)]
-        dasa_names = [opt[0] for opt in dasa_options]
-        selected_dasa_idx = st.selectbox("Select Dasa:", options=dasa_names, index=st.session_state.selected_dasa_idx, key="dasa_select")
-        st.session_state.selected_dasa_idx = dasa_names.index(selected_dasa_idx)
-        selected_dasa_period = dasa_periods_filtered[st.session_state.selected_dasa_idx]
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write(f"Dasa: {selected_dasa_period[0]}")
-            st.write(f"Start: {selected_dasa_period[1].strftime('%Y-%m-%d')}")
-        with col2:
-            st.write(f"End: {selected_dasa_period[2].strftime('%Y-%m-%d')}")
+        if dasa_periods_filtered:
+            dasa_names = [p[0] for p in dasa_periods_filtered]
+            selected_dasa_name = st.selectbox("Select Dasa:", options=dasa_names, index=st.session_state.selected_dasa_idx, key="dasa_select")
+            current_dasa_idx = dasa_names.index(selected_dasa_name)
+            if current_dasa_idx != st.session_state.selected_dasa_idx:
+                # Reset children on change
+                st.session_state.selected_bhukti_idx = 0
+                st.session_state.selected_anthara_idx = 0
+                st.session_state.selected_sukshma_idx = 0
+                st.session_state.selected_prana_idx = 0
+            st.session_state.selected_dasa_idx = current_dasa_idx
+            selected_dasa_period = dasa_periods_filtered[current_dasa_idx]
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"Dasa: {selected_dasa_period[0]}")
+                st.write(f"Start: {selected_dasa_period[1].strftime('%Y-%m-%d')}")
+            with col2:
+                st.write(f"End: {selected_dasa_period[2].strftime('%Y-%m-%d')}")
 
-        # Bhukti if depth >=2
-        if max_depth >= 2:
-            bhuktis = filter_from_birth(selected_dasa_period[3], utc_dt)
-            bhukti_options = [(p[0], i) for i, p in enumerate(bhuktis)] if bhuktis else []
-            if bhukti_options:
-                bhukti_names = [opt[0] for opt in bhukti_options]
-                selected_bhukti_idx = st.selectbox("Select Bhukti:", options=bhukti_names, index=st.session_state.selected_bhukti_idx, key="bhukti_select")
-                st.session_state.selected_bhukti_idx = bhukti_names.index(selected_bhukti_idx)
-                selected_bhukti_period = bhuktis[st.session_state.selected_bhukti_idx]
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write(f"Bhukti: {selected_bhukti_period[0]}")
-                    st.write(f"Start: {selected_bhukti_period[1].strftime('%Y-%m-%d')}")
-                with col2:
-                    st.write(f"End: {selected_bhukti_period[2].strftime('%Y-%m-%d')}")
-            else:
-                st.write("No Bhuktis available.")
+            # Bhukti if depth >=2
+            if max_depth >= 2:
+                bhuktis = selected_dasa_period[3]
+                if bhuktis:
+                    bhukti_names = [p[0] for p in bhuktis]
+                    selected_bhukti_name = st.selectbox("Select Bhukti:", options=bhukti_names, index=st.session_state.selected_bhukti_idx, key="bhukti_select")
+                    current_bhukti_idx = bhukti_names.index(selected_bhukti_name)
+                    if current_bhukti_idx != st.session_state.selected_bhukti_idx:
+                        # Reset children on change
+                        st.session_state.selected_anthara_idx = 0
+                        st.session_state.selected_sukshma_idx = 0
+                        st.session_state.selected_prana_idx = 0
+                    st.session_state.selected_bhukti_idx = current_bhukti_idx
+                    selected_bhukti_period = bhuktis[current_bhukti_idx]
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"Bhukti: {selected_bhukti_period[0]}")
+                        st.write(f"Start: {selected_bhukti_period[1].strftime('%Y-%m-%d')}")
+                    with col2:
+                        st.write(f"End: {selected_bhukti_period[2].strftime('%Y-%m-%d')}")
+                else:
+                    st.write("No Bhuktis available.")
 
-        # Anthara if depth >=3
-        if max_depth >= 3 and 'selected_bhukti_idx' in locals() and bhukti_options:
-            antharas = filter_from_birth(selected_bhukti_period[3], utc_dt)
-            anthara_options = [(p[0], i) for i, p in enumerate(antharas)] if antharas else []
-            if anthara_options:
-                anthara_names = [opt[0] for opt in anthara_options]
-                selected_anthara_idx = st.selectbox("Select Anthara:", options=anthara_names, index=st.session_state.selected_anthara_idx, key="anthara_select")
-                st.session_state.selected_anthara_idx = anthara_names.index(selected_anthara_idx)
-                selected_anthara_period = antharas[st.session_state.selected_anthara_idx]
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write(f"Anthara: {selected_anthara_period[0]}")
-                    st.write(f"Start: {selected_anthara_period[1].strftime('%Y-%m-%d %H:%M')}")
-                with col2:
-                    st.write(f"End: {selected_anthara_period[2].strftime('%Y-%m-%d %H:%M')}")
-            else:
-                st.write("No Antharas available.")
+                # Anthara if depth >=3
+                if max_depth >= 3 and 'selected_bhukti_period' in locals() and bhuktis:
+                    antharas = selected_bhukti_period[3]
+                    if antharas:
+                        anthara_names = [p[0] for p in antharas]
+                        selected_anthara_name = st.selectbox("Select Anthara:", options=anthara_names, index=st.session_state.selected_anthara_idx, key="anthara_select")
+                        current_anthara_idx = anthara_names.index(selected_anthara_name)
+                        if current_anthara_idx != st.session_state.selected_anthara_idx:
+                            # Reset children on change
+                            st.session_state.selected_sukshma_idx = 0
+                            st.session_state.selected_prana_idx = 0
+                        st.session_state.selected_anthara_idx = current_anthara_idx
+                        selected_anthara_period = antharas[current_anthara_idx]
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write(f"Anthara: {selected_anthara_period[0]}")
+                            st.write(f"Start: {selected_anthara_period[1].strftime('%Y-%m-%d %H:%M')}")
+                        with col2:
+                            st.write(f"End: {selected_anthara_period[2].strftime('%Y-%m-%d %H:%M')}")
+                    else:
+                        st.write("No Antharas available.")
 
-        # Sukshma if depth >=4
-        if max_depth >= 4 and 'selected_anthara_idx' in locals() and anthara_options:
-            sukshmas = filter_from_birth(selected_anthara_period[3], utc_dt)
-            sukshma_options = [(p[0], i) for i, p in enumerate(sukshmas)] if sukshmas else []
-            if sukshma_options:
-                sukshma_names = [opt[0] for opt in sukshma_options]
-                selected_sukshma_idx = st.selectbox("Select Sukshma:", options=sukshma_names, index=st.session_state.selected_sukshma_idx, key="sukshma_select")
-                st.session_state.selected_sukshma_idx = sukshma_names.index(selected_sukshma_idx)
-                selected_sukshma_period = sukshmas[st.session_state.selected_sukshma_idx]
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write(f"Sukshma: {selected_sukshma_period[0]}")
-                    st.write(f"Start: {selected_sukshma_period[1].strftime('%Y-%m-%d %H:%M')}")
-                with col2:
-                    st.write(f"End: {selected_sukshma_period[2].strftime('%Y-%m-%d %H:%M')}")
-            else:
-                st.write("No Sukshmas available.")
+                    # Sukshma if depth >=4
+                    if max_depth >= 4 and 'selected_anthara_period' in locals() and antharas:
+                        sukshmas = selected_anthara_period[3]
+                        if sukshmas:
+                            sukshma_names = [p[0] for p in sukshmas]
+                            selected_sukshma_name = st.selectbox("Select Sukshma:", options=sukshma_names, index=st.session_state.selected_sukshma_idx, key="sukshma_select")
+                            current_sukshma_idx = sukshma_names.index(selected_sukshma_name)
+                            if current_sukshma_idx != st.session_state.selected_sukshma_idx:
+                                # Reset prana on change
+                                st.session_state.selected_prana_idx = 0
+                            st.session_state.selected_sukshma_idx = current_sukshma_idx
+                            selected_sukshma_period = sukshmas[current_sukshma_idx]
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.write(f"Sukshma: {selected_sukshma_period[0]}")
+                                st.write(f"Start: {selected_sukshma_period[1].strftime('%Y-%m-%d %H:%M')}")
+                            with col2:
+                                st.write(f"End: {selected_sukshma_period[2].strftime('%Y-%m-%d %H:%M')}")
+                        else:
+                            st.write("No Sukshmas available.")
 
-        # Prana if depth >=5
-        if max_depth >= 5 and 'selected_sukshma_idx' in locals() and sukshma_options:
-            pranas = filter_from_birth(selected_sukshma_period[3], utc_dt)
-            prana_options = [(p[0], i) for i, p in enumerate(pranas)] if pranas else []
-            if prana_options:
-                prana_names = [opt[0] for opt in prana_options]
-                selected_prana_idx = st.selectbox("Select Prana:", options=prana_names, index=st.session_state.selected_prana_idx, key="prana_select")
-                st.session_state.selected_prana_idx = prana_names.index(selected_prana_idx)
-                selected_prana_period = pranas[st.session_state.selected_prana_idx]
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write(f"Prana: {selected_prana_period[0]}")
-                    st.write(f"Start: {selected_prana_period[1].strftime('%Y-%m-%d %H:%M')}")
-                with col2:
-                    st.write(f"End: {selected_prana_period[2].strftime('%Y-%m-%d %H:%M')}")
-            else:
-                st.write("No Pranas available.")
+                        # Prana if depth >=5
+                        if max_depth >= 5 and 'selected_sukshma_period' in locals() and sukshmas:
+                            pranas = selected_sukshma_period[3]
+                            if pranas:
+                                prana_names = [p[0] for p in pranas]
+                                selected_prana_name = st.selectbox("Select Prana:", options=prana_names, index=st.session_state.selected_prana_idx, key="prana_select")
+                                current_prana_idx = prana_names.index(selected_prana_name)
+                                st.session_state.selected_prana_idx = current_prana_idx
+                                selected_prana_period = pranas[current_prana_idx]
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.write(f"Prana: {selected_prana_period[0]}")
+                                    st.write(f"Start: {selected_prana_period[1].strftime('%Y-%m-%d %H:%M')}")
+                                with col2:
+                                    st.write(f"End: {selected_prana_period[2].strftime('%Y-%m-%d %H:%M')}")
+                            else:
+                                st.write("No Pranas available.")
+        else:
+            st.warning("No Dasa periods available.")
 
-        st.info("Note: Periods are filtered from birth. Nested dropdowns allow navigation through the hierarchy. Deeper levels show approximate times. For full tree view, consider expanders in future updates.")
+        st.info("Note: Nested dropdowns reset child selections when parent changes. Periods are filtered from birth. Deeper levels show approximate times.")
 
     except Exception as e:
         st.error(f"Error: {e}")
 
-# To host: Save as app.py, run `streamlit run app.py` locally. For cloud hosting, push to GitHub and deploy on Streamlit Cloud (free tier available). Ensure requirements.txt with: streamlit, astropy, geopy, pandas.
+# To host: Save as app.py, run `streamlit run app.py` locally. For cloud hosting, push to GitHub and deploy on Streamlit Cloud.
