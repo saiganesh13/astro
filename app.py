@@ -381,10 +381,20 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
         'Capricorn': (0, 1), 'Aquarius': (0, 2)
     }
 
-    # Draw grid lines
-    for i in range(5):
-        ax.plot([i, i], [0, 4], 'k-', linewidth=1)  # vertical
-        ax.plot([0, 4], [i, i], 'k-', linewidth=1)  # horizontal
+    # Draw only outer grid lines to avoid central boxes
+    # Vertical lines for outer
+    ax.plot([0, 0], [0, 4], 'k-', linewidth=1)
+    ax.plot([1, 1], [0, 4], 'k-', linewidth=1)
+    ax.plot([3, 3], [0, 4], 'k-', linewidth=1)
+    ax.plot([4, 4], [0, 4], 'k-', linewidth=1)
+    # Horizontal lines for outer
+    ax.plot([0, 4], [0, 0], 'k-', linewidth=1)
+    ax.plot([0, 4], [1, 1], 'k-', linewidth=1)
+    ax.plot([0, 4], [3, 3], 'k-', linewidth=1)
+    ax.plot([0, 4], [4, 4], 'k-', linewidth=1)
+    # Inner connections without full center grid
+    ax.plot([1, 3], [1, 1], 'k-', linewidth=1)
+    ax.plot([1, 3], [3, 3], 'k-', linewidth=1)
 
     # Compute house for each sign based on Lagna
     lagna_sign_idx = sign_names.index(lagna_sign)
@@ -668,11 +678,11 @@ if st.session_state.chart_data:
         for h in range(1, 13):
             sign_start = (chart_data['lagna_sid'] + (h - 1) * 30) % 360
             house_to_sign_rasi[h] = get_sign(sign_start)
-        fig, ax = plt.subplots(figsize=(8, 8))
+        fig, ax = plt.subplots(figsize=(6, 6))
         plot_north_indian_style(ax, chart_data['house_to_planets_rasi'], house_to_sign_rasi, 'Rasi Chart (North Indian)')
         st.pyplot(fig)
     elif chart_style == "South Indian":
-        fig, ax = plt.subplots(figsize=(8, 8))
+        fig, ax = plt.subplots(figsize=(6, 6))
         plot_south_indian_style(ax, chart_data['house_to_planets_rasi'], chart_data['lagna_sign'], 'Rasi Chart (South Indian)')
         st.pyplot(fig)
     
@@ -691,11 +701,11 @@ if st.session_state.chart_data:
         for h in range(1, 13):
             sign_start = (chart_data['nav_lagna'] + (h - 1) * 30) % 360
             house_to_sign_nav[h] = get_sign(sign_start)
-        fig, ax = plt.subplots(figsize=(8, 8))
+        fig, ax = plt.subplots(figsize=(6, 6))
         plot_north_indian_style(ax, chart_data['house_to_planets_nav'], house_to_sign_nav, 'Navamsa Chart (North Indian)')
         st.pyplot(fig)
     elif chart_style == "South Indian":
-        fig, ax = plt.subplots(figsize=(8, 8))
+        fig, ax = plt.subplots(figsize=(6, 6))
         plot_south_indian_style(ax, chart_data['house_to_planets_nav'], chart_data['nav_lagna_sign'], 'Navamsa Chart (South Indian)')
         st.pyplot(fig)
     
