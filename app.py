@@ -139,14 +139,22 @@ def filter_from_birth(periods, birth_dt):
     return filtered
 
 def duration_str(delta):
-    total_days = delta.total_seconds() / 86400  # More precise if needed, but approx
-    years = int(total_days / 365.25)
-    rem_days = total_days % 365.25
-    months = int(rem_days / 30.4375)  # Avg month
-    days = int(rem_days % 30.4375)
-    if years + months + days == 0:
-        return "Less than 1 day"
-    return f"{years}y {months}m {days}d"
+    total_days = delta.total_seconds() / 86400
+    if total_days < 1:
+        total_hours = total_days * 24
+        hours = int(total_hours)
+        minutes = int((total_hours - hours) * 60)
+        if hours == 0 and minutes == 0:
+            return "Less than 1 minute"
+        return f"{hours}h {minutes}m"
+    else:
+        years = int(total_days / 365.25)
+        rem_days = total_days % 365.25
+        months = int(rem_days / 30.4375)  # Avg month
+        days = int(rem_days % 30.4375)
+        if years + months + days == 0:
+            return "Less than 1 day"
+        return f"{years}y {months}m {days}d"
 
 def compute_chart(date_text, time_text, ampm, lat, lon, tz_offset, max_depth):
     date_obj = datetime.strptime(date_text, '%d:%m:%Y')
