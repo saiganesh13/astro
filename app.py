@@ -258,7 +258,6 @@ def compute_chart(date_text, time_text, ampm, lat, lon, tz_offset, max_depth):
     house_status_data = []
     for h in range(1,13):
         sign_idx = (lagna_idx + h - 1) % 12
-        house_sign = sign_names[sign_idx]
         lord = sign_lords[sign_idx]
         lord_house = planet_to_house[lord]
         aspecting = []
@@ -270,8 +269,9 @@ def compute_chart(date_text, time_text, ampm, lat, lon, tz_offset, max_depth):
                     if a_h == h:
                         aspecting.append(planet)
         aspect_str = ', '.join(aspecting) if aspecting else 'None'
-        house_status_data.append([f"House {h}", house_sign, lord, f"House {lord_house}", aspect_str])
-    df_house_status = pd.DataFrame(house_status_data, columns=['House', 'Sign', 'Lord', 'Lord in', 'Aspects from'])
+        pls = ', '.join(sorted(house_planets_rasi[h])) if house_planets_rasi[h] else 'Empty'
+        house_status_data.append([f"House {h}", lord, f"House {lord_house}", aspect_str, pls])
+    df_house_status = pd.DataFrame(house_status_data, columns=['House', 'Lord', 'Lord in', 'Aspects from', 'Planets'])
 
     # Dasa - FIXED: correct dasa_start_dt
     moon_lon = lon_sid['moon']
