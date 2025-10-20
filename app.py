@@ -430,8 +430,14 @@ with col3:
 
 # Button to generate or regenerate
 if st.button("Generate Chart", use_container_width=True):
-    st.session_state.chart_data = compute_chart(date_text, time_text, ampm, lat, lon, tz_offset, max_depth)
-    st.rerun()
+    if not date_text or not time_text:
+        st.error("Please enter both date and time.")
+    else:
+        try:
+            st.session_state.chart_data = compute_chart(date_text, time_text, ampm, lat, lon, tz_offset, max_depth)
+            st.rerun()
+        except ValueError as e:
+            st.error(f"Invalid date or time format. Please check your input: {e}")
 
 # Display chart if computed
 if st.session_state.chart_data:
