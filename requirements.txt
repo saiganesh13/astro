@@ -3,3 +3,4 @@ astropy
 geopy
 pandas
 geolocator
+geopy
