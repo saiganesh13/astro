@@ -138,9 +138,9 @@ def filter_from_birth(periods, birth_dt):
             filtered.append((lord, adj_start, end, adj_sub))
     return filtered
 
-def duration_str(delta):
+def duration_str(delta, level='dasa'):
     total_days = delta.total_seconds() / 86400
-    if total_days < 1:
+    if total_days < 1 and level in ['sukshma', 'prana', 'sub_prana']:
         total_hours = total_days * 24
         hours = int(total_hours)
         minutes = int((total_hours - hours) * 60)
@@ -472,7 +472,7 @@ if st.session_state.chart_data:
     dasa_data = []
     for lord, start, end, _ in dasa_periods_filtered:
         dur = end - start
-        dasa_data.append({'Planet': lord, 'Start': start.strftime('%Y-%m-%d'), 'End': end.strftime('%Y-%m-%d'), 'Duration': duration_str(dur)})
+        dasa_data.append({'Planet': lord, 'Start': start.strftime('%Y-%m-%d'), 'End': end.strftime('%Y-%m-%d'), 'Duration': duration_str(dur, 'dasa')})
     df_dasa = pd.DataFrame(dasa_data)
     st.table(df_dasa.reset_index(drop=True))
 
@@ -488,7 +488,7 @@ if st.session_state.chart_data:
                 bhukti_data = []
                 for b_lord, b_start, b_end, _ in bhuktis:
                     dur = b_end - b_start
-                    bhukti_data.append({'Planet': b_lord, 'Start': b_start.strftime('%Y-%m-%d'), 'End': b_end.strftime('%Y-%m-%d'), 'Duration': duration_str(dur)})
+                    bhukti_data.append({'Planet': b_lord, 'Start': b_start.strftime('%Y-%m-%d'), 'End': b_end.strftime('%Y-%m-%d'), 'Duration': duration_str(dur, 'bhukti')})
                 df_bhukti = pd.DataFrame(bhukti_data)
                 st.table(df_bhukti.reset_index(drop=True))
 
@@ -503,7 +503,7 @@ if st.session_state.chart_data:
                             anthara_data = []
                             for a_lord, a_start, a_end, _ in antharas:
                                 dur = a_end - a_start
-                                anthara_data.append({'Planet': a_lord, 'Start': a_start.strftime('%Y-%m-%d %H:%M'), 'End': a_end.strftime('%Y-%m-%d %H:%M'), 'Duration': duration_str(dur)})
+                                anthara_data.append({'Planet': a_lord, 'Start': a_start.strftime('%Y-%m-%d %H:%M'), 'End': a_end.strftime('%Y-%m-%d %H:%M'), 'Duration': duration_str(dur, 'anthara')})
                             df_anthara = pd.DataFrame(anthara_data)
                             st.table(df_anthara.reset_index(drop=True))
 
@@ -518,7 +518,7 @@ if st.session_state.chart_data:
                                         sukshma_data = []
                                         for s_lord, s_start, s_end, _ in sukshmas:
                                             dur = s_end - s_start
-                                            sukshma_data.append({'Planet': s_lord, 'Start': s_start.strftime('%Y-%m-%d %H:%M'), 'End': s_end.strftime('%Y-%m-%d %H:%M'), 'Duration': duration_str(dur)})
+                                            sukshma_data.append({'Planet': s_lord, 'Start': s_start.strftime('%Y-%m-%d %H:%M'), 'End': s_end.strftime('%Y-%m-%d %H:%M'), 'Duration': duration_str(dur, 'sukshma')})
                                         df_sukshma = pd.DataFrame(sukshma_data)
                                         st.table(df_sukshma.reset_index(drop=True))
 
@@ -533,7 +533,7 @@ if st.session_state.chart_data:
                                                     prana_data = []
                                                     for pr_lord, pr_start, pr_end, _ in pranas:
                                                         dur = pr_end - pr_start
-                                                        prana_data.append({'Planet': pr_lord, 'Start': pr_start.strftime('%Y-%m-%d %H:%M'), 'End': pr_end.strftime('%Y-%m-%d %H:%M'), 'Duration': duration_str(dur)})
+                                                        prana_data.append({'Planet': pr_lord, 'Start': pr_start.strftime('%Y-%m-%d %H:%M'), 'End': pr_end.strftime('%Y-%m-%d %H:%M'), 'Duration': duration_str(dur, 'prana')})
                                                     df_prana = pd.DataFrame(prana_data)
                                                     st.table(df_prana.reset_index(drop=True))
 
@@ -548,7 +548,7 @@ if st.session_state.chart_data:
                                                                 sub_prana_data = []
                                                                 for sp_lord, sp_start, sp_end, _ in sub_pranas:
                                                                     dur = sp_end - sp_start
-                                                                    sub_prana_data.append({'Planet': sp_lord, 'Start': sp_start.strftime('%Y-%m-%d %H:%M'), 'End': sp_end.strftime('%Y-%m-%d %H:%M'), 'Duration': duration_str(dur)})
+                                                                    sub_prana_data.append({'Planet': sp_lord, 'Start': sp_start.strftime('%Y-%m-%d %H:%M'), 'End': sp_end.strftime('%Y-%m-%d %H:%M'), 'Duration': duration_str(dur, 'sub_prana')})
                                                                 df_sub_prana = pd.DataFrame(sub_prana_data)
                                                                 st.table(df_sub_prana.reset_index(drop=True))
     st.info("Note: Periods filtered from birth. Durations approximate. Deeper levels use nested expanders for navigation.")
