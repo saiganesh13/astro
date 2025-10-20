@@ -260,7 +260,51 @@ def compute_chart(date_text, time_text, ampm, lat, lon, tz_offset, max_depth):
     }
 
 # Streamlit UI
-st.title("Vedic Astrology Chart Generator")
+st.set_page_config(page_title="Vedic Astrology", layout="wide")
+
+# Custom CSS for styling
+st.markdown("""
+<style>
+    .stApp {
+        background-color: white;
+        color: #125336;
+    }
+    .stTextInput > div > div > input {
+        background-color: #125336;
+        color: white;
+        border: 1px solid #125336;
+    }
+    .stTextInput > div > div > div > label {
+        color: #125336;
+    }
+    .stSelectbox > div > div > div > label {
+        color: #125336;
+    }
+    .stNumberInput > div > div > div > label {
+        color: #125336;
+    }
+    .stButton > button {
+        background-color: #125336;
+        color: white;
+        border: none;
+    }
+    .stButton > button:hover {
+        background-color: #0a3d22;
+    }
+    .stMarkdown {
+        color: #125336;
+    }
+    .stDataFrame {
+        background-color: white;
+        color: #125336;
+    }
+    h1, h2, h3 {
+        color: #125336 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.title("🪐 Vedic Astrology Chart Generator")
 
 # Initialize session state for chart data
 if 'chart_data' not in st.session_state:
@@ -274,67 +318,65 @@ def get_geolocator():
 
 geocode = get_geolocator()
 
-# Inputs
-date_text = st.text_input("Enter Date (DD:MM:YYYY):")
-time_text = st.text_input("Enter Time (HH:MM):")
-ampm = st.selectbox("AM/PM:", ["AM", "PM"])
-
-# City search with suggestions
-city_query = st.text_input("Enter City Name (for lat/lon lookup):")
-location_data = None
-if city_query:
-    try:
-        # Search for multiple locations
-        locations = geolocator.geocode(city_query, exactly_one=False, limit=5)
-        if locations:
-            location_options = [f"{loc.address} (Lat: {loc.latitude:.2f}, Lon: {loc.longitude:.2f})" for loc in locations]
-            selected_idx = st.selectbox("Select Location:", options=location_options, index=0, key="location_select")
-            selected_location = locations[location_options.index(selected_idx)]
-            location_data = {'lat': selected_location.latitude, 'lon': selected_location.longitude, 'address': selected_location.address}
-            st.success(f"Selected: {selected_location.address}")
-        else:
-            st.warning("No locations found. Trying fallback...")
+# Inputs in columns
+col1, col2 = st.columns(2)
+with col1:
+    date_text = st.text_input("Enter Date (DD:MM:YYYY):")
+    time_text = st.text_input("Enter Time (HH:MM):")
+    ampm = st.selectbox("AM/PM:", ["AM", "PM"])
+with col2:
+    # City search with suggestions
+    city_query = st.text_input("Enter City Name (for lat/lon lookup):")
+    location_data = None
+    if city_query:
+        try:
+            # Search for multiple locations using geocode
+            locations = geocode(city_query, exactly_one=False, limit=5)
+            if locations:
+                location_options = [f"{loc.address} (Lat: {loc.latitude:.2f}, Lon: {loc.longitude:.2f})" for loc in locations]
+                selected_idx = st.selectbox("Select Location:", options=location_options, index=0, key="location_select")
+                selected_location = locations[location_options.index(selected_idx)]
+                location_data = {'lat': selected_location.latitude, 'lon': selected_location.longitude, 'address': selected_location.address}
+                st.success(f"Selected: {selected_location.address}")
+            else:
+                st.warning("No locations found. Trying fallback...")
+                city_key = city_query.title()
+                if city_key in cities_fallback:
+                    location_data = cities_fallback[city_key]
+                    st.info("Using fallback data.")
+        except Exception as e:
+            st.error(f"Geocoding error: {e}")
+            # Fallback
             city_key = city_query.title()
             if city_key in cities_fallback:
                 location_data = cities_fallback[city_key]
                 st.info("Using fallback data.")
-    except Exception as e:
-        st.error(f"Geocoding error: {e}")
-        # Fallback
-        city_key = city_query.title()
-        if city_key in cities_fallback:
-            location_data = cities_fallback[city_key]
-            st.info("Using fallback data.")
 
-if location_data:
-    lat = location_data['lat']
-    lon = location_data['lon']
-    st.write(f"Using location: Lat {lat:.2f}, Lon {lon:.2f}")
-else:
-    lat = 13.08  # Default Chennai
-    lon = 80.27
-    st.warning("Using default location: Chennai")
+    if location_data:
+        lat = location_data['lat']
+        lon = location_data['lon']
+        st.write(f"Using location: Lat {lat:.2f}, Lon {lon:.2f}")
+    else:
+        lat = 13.08  # Default Chennai
+        lon = 80.27
+        st.warning("Using default location: Chennai")
 
-tz_offset = st.number_input("Timezone offset (hours, e.g., 5.5 for IST):", value=5.5, step=0.5)
-max_depth_options = {1: 'Dasa only', 2: 'Dasa + Bhukti', 3: 'Dasa + Bhukti + Anthara', 
-                     4: 'Dasa + Bhukti + Anthara + Sukshma', 5: 'Dasa + Bhukti + Anthara + Sukshma + Prana'}
-selected_depth_str = st.selectbox("Select max depth for periods:", options=list(max_depth_options.values()), index=2)
-max_depth = list(max_depth_options.keys())[list(max_depth_options.values()).index(selected_depth_str)]
+    tz_offset = st.number_input("Timezone offset (hours, e.g., 5.5 for IST):", value=5.5, step=0.5)
+
+col3, col4 = st.columns(2)
+with col3:
+    max_depth_options = {1: 'Dasa only', 2: 'Dasa + Bhukti', 3: 'Dasa + Bhukti + Anthara', 
+                         4: 'Dasa + Bhukti + Anthara + Sukshma', 5: 'Dasa + Bhukti + Anthara + Sukshma + Prana'}
+    selected_depth_str = st.selectbox("Select max depth for periods:", options=list(max_depth_options.values()), index=2)
+    max_depth = list(max_depth_options.keys())[list(max_depth_options.values()).index(selected_depth_str)]
 
 # Button to generate or regenerate
-if st.button("Generate Chart"):
+if st.button("Generate Chart", use_container_width=True):
     st.session_state.chart_data = compute_chart(date_text, time_text, ampm, lat, lon, tz_offset, max_depth)
     # Reset dropdown indices on regenerate
-    if 'selected_dasa_idx' in st.session_state:
-        del st.session_state.selected_dasa_idx
-    if 'selected_bhukti_idx' in st.session_state:
-        del st.session_state.selected_bhukti_idx
-    if 'selected_anthara_idx' in st.session_state:
-        del st.session_state.selected_anthara_idx
-    if 'selected_sukshma_idx' in st.session_state:
-        del st.session_state.selected_sukshma_idx
-    if 'selected_prana_idx' in st.session_state:
-        del st.session_state.selected_prana_idx
+    for key in ['selected_dasa_idx', 'selected_bhukti_idx', 'selected_anthara_idx', 'selected_sukshma_idx', 'selected_prana_idx']:
+        if key in st.session_state:
+            del st.session_state[key]
     st.rerun()
 
 # Display chart if computed
@@ -379,10 +421,10 @@ if st.session_state.chart_data:
         selected_dasa_period = dasa_periods_filtered[current_dasa_idx]
         col1, col2 = st.columns(2)
         with col1:
-            st.write(f"Dasa: {selected_dasa_period[0]}")
-            st.write(f"Start: {selected_dasa_period[1].strftime('%Y-%m-%d')}")
+            st.markdown(f"**Dasa Planet:** {selected_dasa_period[0]}")
+            st.markdown(f"**Start:** {selected_dasa_period[1].strftime('%Y-%m-%d')}")
         with col2:
-            st.write(f"End: {selected_dasa_period[2].strftime('%Y-%m-%d')}")
+            st.markdown(f"**End:** {selected_dasa_period[2].strftime('%Y-%m-%d')}")
 
         # Bhukti if depth >=2
         if max_depth >= 2:
@@ -400,10 +442,10 @@ if st.session_state.chart_data:
                 selected_bhukti_period = bhuktis[current_bhukti_idx]
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.write(f"Bhukti: {selected_bhukti_period[0]}")
-                    st.write(f"Start: {selected_bhukti_period[1].strftime('%Y-%m-%d')}")
+                    st.markdown(f"**Bhukti Planet:** {selected_bhukti_period[0]}")
+                    st.markdown(f"**Start:** {selected_bhukti_period[1].strftime('%Y-%m-%d')}")
                 with col2:
-                    st.write(f"End: {selected_bhukti_period[2].strftime('%Y-%m-%d')}")
+                    st.markdown(f"**End:** {selected_bhukti_period[2].strftime('%Y-%m-%d')}")
             else:
                 st.write("No Bhuktis available.")
 
@@ -422,10 +464,10 @@ if st.session_state.chart_data:
                     selected_anthara_period = antharas[current_anthara_idx]
                     col1, col2 = st.columns(2)
                     with col1:
-                        st.write(f"Anthara: {selected_anthara_period[0]}")
-                        st.write(f"Start: {selected_anthara_period[1].strftime('%Y-%m-%d %H:%M')}")
+                        st.markdown(f"**Anthara Planet:** {selected_anthara_period[0]}")
+                        st.markdown(f"**Start:** {selected_anthara_period[1].strftime('%Y-%m-%d %H:%M')}")
                     with col2:
-                        st.write(f"End: {selected_anthara_period[2].strftime('%Y-%m-%d %H:%M')}")
+                        st.markdown(f"**End:** {selected_anthara_period[2].strftime('%Y-%m-%d %H:%M')}")
                 else:
                     st.write("No Antharas available.")
 
@@ -443,10 +485,10 @@ if st.session_state.chart_data:
                         selected_sukshma_period = sukshmas[current_sukshma_idx]
                         col1, col2 = st.columns(2)
                         with col1:
-                            st.write(f"Sukshma: {selected_sukshma_period[0]}")
-                            st.write(f"Start: {selected_sukshma_period[1].strftime('%Y-%m-%d %H:%M')}")
+                            st.markdown(f"**Sukshma Planet:** {selected_sukshma_period[0]}")
+                            st.markdown(f"**Start:** {selected_sukshma_period[1].strftime('%Y-%m-%d %H:%M')}")
                         with col2:
-                            st.write(f"End: {selected_sukshma_period[2].strftime('%Y-%m-%d %H:%M')}")
+                            st.markdown(f"**End:** {selected_sukshma_period[2].strftime('%Y-%m-%d %H:%M')}")
                     else:
                         st.write("No Sukshmas available.")
 
@@ -461,10 +503,10 @@ if st.session_state.chart_data:
                             selected_prana_period = pranas[current_prana_idx]
                             col1, col2 = st.columns(2)
                             with col1:
-                                st.write(f"Prana: {selected_prana_period[0]}")
-                                st.write(f"Start: {selected_prana_period[1].strftime('%Y-%m-%d %H:%M')}")
+                                st.markdown(f"**Prana Planet:** {selected_prana_period[0]}")
+                                st.markdown(f"**Start:** {selected_prana_period[1].strftime('%Y-%m-%d %H:%M')}")
                             with col2:
-                                st.write(f"End: {selected_prana_period[2].strftime('%Y-%m-%d %H:%M')}")
+                                st.markdown(f"**End:** {selected_prana_period[2].strftime('%Y-%m-%d %H:%M')}")
                         else:
                             st.write("No Pranas available.")
     else:
