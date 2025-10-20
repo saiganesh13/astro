@@ -1,4 +1,4 @@
-streamlit==1.38.0
-pandas==2.2.2
-geopy==2.4.1
-astropy==5.3.4  # Lighter older version; or try 6.1.0 if 5.x fails
+streamlit
+pandas
+geopy
+astropy
