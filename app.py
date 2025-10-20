@@ -361,7 +361,7 @@ def plot_north_indian_style(ax, house_to_planets, house_to_sign, title):
         sign = house_to_sign.get(house, '')
         planets = ', '.join(house_to_planets.get(house, []))
         text = f'H{house}\n{sign[:3]}\n{planets[:10]}'  # Abbreviate
-        color = 'yellow' if house == 1 else 'white'
+        color = '#F5F5F5'  # Light uniform color
         box = FancyBboxPatch((x-0.15, y-0.15), 0.3, 0.3, boxstyle="round,pad=0.02", ec="black", fc=color, alpha=0.8)
         ax.add_patch(box)
         ax.text(x, y, text, ha='center', va='center', fontsize=8, weight='bold')
@@ -390,9 +390,8 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
         house = ((s_idx - lagna_sign_idx) % 12) + 1
         house_for_sign[sign] = house
 
-    # Better color palette
-    colors = ['#FFF8DC', '#F0E68C', '#E6E6FA', '#F0FFF0', '#FFE4E1', '#E0FFFF', '#FFFACD', '#F5F5DC', '#DDA0DD', '#98FB98', '#F0F8FF', '#FFDAB9']
-    color_index = 0
+    # Uniform light color
+    uniform_color = '#F5F5F5'
 
     # Plot each sign box closer
     box_width = 0.85
@@ -408,11 +407,7 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
         
         x = grid_x * 0.85 + 0.075
         y = (3 - grid_y) * 0.85 + 0.075  # Invert y for top-down, closer spacing
-        if house == 1:
-            color = '#FFD700'  # Gold for Lagna
-        else:
-            color = colors[color_index % len(colors)]
-            color_index += 1
+        color = uniform_color  # Uniform color
         box = FancyBboxPatch((x, y), box_width, box_height, boxstyle="round,pad=0.02", 
                              ec="black", fc=color, alpha=0.9, linewidth=1.5)
         ax.add_patch(box)
@@ -673,11 +668,11 @@ if st.session_state.chart_data:
         for h in range(1, 13):
             sign_start = (chart_data['lagna_sid'] + (h - 1) * 30) % 360
             house_to_sign_rasi[h] = get_sign(sign_start)
-        fig, ax = plt.subplots(figsize=(6, 6))
+        fig, ax = plt.subplots(figsize=(5, 5))
         plot_north_indian_style(ax, chart_data['house_to_planets_rasi'], house_to_sign_rasi, 'Rasi Chart (North Indian)')
         st.pyplot(fig)
     elif chart_style == "South Indian":
-        fig, ax = plt.subplots(figsize=(6, 6))
+        fig, ax = plt.subplots(figsize=(5, 5))
         plot_south_indian_style(ax, chart_data['house_to_planets_rasi'], chart_data['lagna_sign'], 'Rasi Chart (South Indian)')
         st.pyplot(fig)
     
@@ -696,11 +691,11 @@ if st.session_state.chart_data:
         for h in range(1, 13):
             sign_start = (chart_data['nav_lagna'] + (h - 1) * 30) % 360
             house_to_sign_nav[h] = get_sign(sign_start)
-        fig, ax = plt.subplots(figsize=(6, 6))
+        fig, ax = plt.subplots(figsize=(5, 5))
         plot_north_indian_style(ax, chart_data['house_to_planets_nav'], house_to_sign_nav, 'Navamsa Chart (North Indian)')
         st.pyplot(fig)
     elif chart_style == "South Indian":
-        fig, ax = plt.subplots(figsize=(6, 6))
+        fig, ax = plt.subplots(figsize=(5, 5))
         plot_south_indian_style(ax, chart_data['house_to_planets_nav'], chart_data['nav_lagna_sign'], 'Navamsa Chart (South Indian)')
         st.pyplot(fig)
     
