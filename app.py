@@ -309,13 +309,14 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         'nav_lagna_sign': nav_lagna_sign,
         'moon_rasi': get_sign(moon_lon),
         'moon_nakshatra': moon_nak,
+        'moon_pada': moon_pada,
         'selected_depth': selected_depth,
         'utc_dt': utc_dt,
         'max_depth': max_depth
     }
 
 # Streamlit UI
-st.set_page_config(page_title="Sivapathy Horoscope", layout="wide")
+st.set_page_config(page_title="Vedic Astrology", layout="wide")
 
 # Enhanced CSS
 st.markdown("""
@@ -368,7 +369,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Sivapathy Horoscope Chart Generator")
+st.title("Vedic Astrology Chart Generator")
 
 # Initialize session state
 if 'chart_data' not in st.session_state:
@@ -428,33 +429,29 @@ if use_custom_coords:
         lon = st.number_input("Longitude", value=80.27, format="%.4f")
     location_data = {'lat': lat, 'lon': lon}
 else:
-    # City search with autocomplete
-    def search_city():
-        query = st.session_state.city_input
-        if query and len(query) >= 2:
-            try:
-                locations = geocode(query, exactly_one=False, limit=5)
-                if locations:
-                    st.session_state.search_results = [
-                        {
-                            'display': f"{loc.address}",
-                            'lat': loc.latitude,
-                            'lon': loc.longitude,
-                            'address': loc.address
-                        }
-                        for loc in locations
-                    ]
-                else:
-                    city_key = query.title()
-                    if city_key in cities_fallback:
-                        st.session_state.search_results = [{
-                            'display': f"{city_key} (Fallback)",
-                            'lat': cities_fallback[city_key]['lat'],
-                            'lon': cities_fallback[city_key]['lon'],
-                            'address': city_key
-                        }]
-            except:
-                city_key = query.title()
+    # City search with real-time autocomplete
+    city_query = st.text_input(
+        "Search City",
+        placeholder="Start typing city name...",
+        key="city_input"
+    )
+    
+    # Automatically search as user types
+    if city_query and len(city_query) >= 2:
+        try:
+            locations = geocode(city_query, exactly_one=False, limit=5)
+            if locations:
+                st.session_state.search_results = [
+                    {
+                        'display': f"{loc.address}",
+                        'lat': loc.latitude,
+                        'lon': loc.longitude,
+                        'address': loc.address
+                    }
+                    for loc in locations
+                ]
+            else:
+                city_key = city_query.title()
                 if city_key in cities_fallback:
                     st.session_state.search_results = [{
                         'display': f"{city_key} (Fallback)",
@@ -462,13 +459,21 @@ else:
                         'lon': cities_fallback[city_key]['lon'],
                         'address': city_key
                     }]
-    
-    city_query = st.text_input(
-        "Search City",
-        placeholder="Enter city/town name...",
-        key="city_input",
-        on_change=search_city
-    )
+                else:
+                    st.session_state.search_results = []
+        except:
+            city_key = city_query.title()
+            if city_key in cities_fallback:
+                st.session_state.search_results = [{
+                    'display': f"{city_key} (Fallback)",
+                    'lat': cities_fallback[city_key]['lat'],
+                    'lon': cities_fallback[city_key]['lon'],
+                    'address': city_key
+                }]
+            else:
+                st.session_state.search_results = []
+    elif len(city_query) < 2:
+        st.session_state.search_results = []
     
     # Show search results
     if st.session_state.search_results:
@@ -536,26 +541,26 @@ if st.session_state.chart_data:
         <div class="summary-item"><strong>Name:</strong> {chart_data['name']}</div>
         <div class="summary-item"><strong>Lagna:</strong> {chart_data['lagna_sign']} ({chart_data['lagna_sid']:.2f}°)</div>
         <div class="summary-item"><strong>Rasi (Moon Sign):</strong> {chart_data['moon_rasi']}</div>
-        <div class="summary-item"><strong>Nakshatra:</strong> {chart_data['moon_nakshatra']}</div>
+        <div class="summary-item"><strong>Nakshatra:</strong> {chart_data['moon_nakshatra']} (Pada {chart_data['moon_pada']})</div>
     </div>
     """, unsafe_allow_html=True)
     
     # Planetary Details
     st.subheader("Planetary Positions")
-    st.table(chart_data['df_planets'])
+    st.dataframe(chart_data['df_planets'], hide_index=True, use_container_width=True)
     
     # Rasi Chart
     st.subheader("Rasi Chart (D1)")
-    st.table(chart_data['df_rasi'])
+    st.dataframe(chart_data['df_rasi'], hide_index=True, use_container_width=True)
     
     # House Status
     st.subheader("House Analysis")
-    st.table(chart_data['df_house_status'])
+    st.dataframe(chart_data['df_house_status'], hide_index=True, use_container_width=True)
     
     # Navamsa Chart
     st.subheader("Navamsa Chart (D9)")
     st.write(f"Navamsa Lagna: {chart_data['nav_lagna_sign']} ({chart_data['nav_lagna']:.2f}°)")
-    st.table(chart_data['df_nav'])
+    st.dataframe(chart_data['df_nav'], hide_index=True, use_container_width=True)
     
     # Vimshottari Dasa
     st.subheader(f"Vimshottari Dasa ({chart_data['selected_depth']})")
@@ -575,7 +580,7 @@ if st.session_state.chart_data:
             'Duration': duration_str(dur, 'dasa')
         })
     df_dasa = pd.DataFrame(dasa_data)
-    st.table(df_dasa)
+    st.dataframe(df_dasa, hide_index=True, use_container_width=True)
     
     # Nested periods with expanders
     if max_depth >= 2:
@@ -597,7 +602,7 @@ if st.session_state.chart_data:
                         'Duration': duration_str(dur, 'bhukti')
                     })
                 df_bhukti = pd.DataFrame(bhukti_data)
-                st.table(df_bhukti)
+                st.dataframe(df_bhukti, hide_index=True, use_container_width=True)
                 
                 if max_depth >= 3:
                     with st.expander("View Antharas", expanded=False):
@@ -618,7 +623,7 @@ if st.session_state.chart_data:
                                     'Duration': duration_str(dur, 'anthara')
                                 })
                             df_anthara = pd.DataFrame(anthara_data)
-                            st.table(df_anthara)
+                            st.dataframe(df_anthara, hide_index=True, use_container_width=True)
                             
                             if max_depth >= 4:
                                 with st.expander("View Sukshmas", expanded=False):
@@ -639,7 +644,7 @@ if st.session_state.chart_data:
                                                 'Duration': duration_str(dur, 'sukshma')
                                             })
                                         df_sukshma = pd.DataFrame(sukshma_data)
-                                        st.table(df_sukshma)
+                                        st.dataframe(df_sukshma, hide_index=True, use_container_width=True)
                                         
                                         if max_depth >= 5:
                                             with st.expander("View Pranas", expanded=False):
@@ -660,7 +665,7 @@ if st.session_state.chart_data:
                                                             'Duration': duration_str(dur, 'prana')
                                                         })
                                                     df_prana = pd.DataFrame(prana_data)
-                                                    st.table(df_prana)
+                                                    st.dataframe(df_prana, hide_index=True, use_container_width=True)
                                                     
                                                     if max_depth >= 6:
                                                         with st.expander("View Sub-Pranas", expanded=False):
@@ -681,11 +686,11 @@ if st.session_state.chart_data:
                                                                         'Duration': duration_str(dur, 'sub_prana')
                                                                     })
                                                                 df_sub_prana = pd.DataFrame(sub_prana_data)
-                                                                st.table(df_sub_prana)
+                                                                st.dataframe(df_sub_prana, hide_index=True, use_container_width=True)
     
     st.info("Note: Periods filtered from birth. Durations approximate.")
 else:
     st.info("Enter details above and click 'Generate Chart' to begin")
 
 st.markdown("---")
-st.caption("Sivapathy Horoscope Chart Generator")
+st.caption("Vedic Astrology Chart Generator")
