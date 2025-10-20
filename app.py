@@ -7,7 +7,6 @@ from collections import defaultdict
 import pandas as pd
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
-import hashlib
 
 # Note: Install required packages: pip install streamlit astropy geopy pandas
 
@@ -137,6 +136,16 @@ def filter_from_birth(periods, birth_dt):
             filtered.append((lord, adj_start, end, adj_sub))
     return filtered
 
+def duration_str(delta):
+    total_days = delta.total_seconds() / 86400  # More precise if needed, but approx
+    years = int(total_days / 365.25)
+    rem_days = total_days % 365.25
+    months = int(rem_days / 30.4375)  # Avg month
+    days = int(rem_days % 30.4375)
+    if years + months + days == 0:
+        return "Less than 1 day"
+    return f"{years}y {months}m {days}d"
+
 def compute_chart(date_text, time_text, ampm, lat, lon, tz_offset, max_depth):
     date_obj = datetime.strptime(date_text, '%d:%m:%Y')
     time_obj = datetime.strptime(time_text + ' ' + ampm, '%I:%M %p')
@@ -229,11 +238,12 @@ def compute_chart(date_text, time_text, ampm, lat, lon, tz_offset, max_depth):
         nav_data.append([f"House {h}", nav_sign, pls])
     df_nav = pd.DataFrame(nav_data, columns=['House', 'Sign', 'Planets'])
 
-    # Dasa
+    # Dasa - FIXED: correct dasa_start_dt
     moon_lon = lon_sid['moon']
     dasa_start_idx, balance_years = generate_vimshottari_dasa(moon_lon)
-    balance_days = balance_years * 365.25
-    dasa_start_dt = utc_dt - timedelta(days=balance_days)
+    full_first = years[dasa_start_idx]
+    passed_years = full_first - balance_years
+    dasa_start_dt = utc_dt - timedelta(days=passed_years * 365.25)
 
     # Generate full 120 years from dasa start
     dasa_periods = generate_periods(dasa_start_dt, dasa_start_idx, 120, level='dasa', max_depth=max_depth)
@@ -256,13 +266,14 @@ def compute_chart(date_text, time_text, ampm, lat, lon, tz_offset, max_depth):
         'lagna_sign': lagna_sign,
         'nav_lagna_sign': nav_lagna_sign,
         'selected_depth': selected_depth,
-        'utc_dt': utc_dt
+        'utc_dt': utc_dt,
+        'max_depth': max_depth
     }
 
 # Streamlit UI
 st.set_page_config(page_title="Vedic Astrology", layout="wide")
 
-# Custom CSS for styling
+# Custom CSS for styling - green only for button
 st.markdown("""
 <style>
     .stApp {
@@ -270,18 +281,28 @@ st.markdown("""
         color: #125336;
     }
     .stTextInput > div > div > input {
-        background-color: #125336;
-        color: white;
+        background-color: white;
+        color: #125336;
         border: 1px solid #125336;
     }
     .stTextInput > div > div > div > label {
         color: #125336;
     }
-    .stSelectbox > div > div > div > label {
+    .stSelectbox > label {
         color: #125336;
+    }
+    .stSelectbox > div > div > select {
+        background-color: white;
+        color: #125336;
+        border: 1px solid #125336;
     }
     .stNumberInput > div > div > div > label {
         color: #125336;
+    }
+    .stNumberInput > div > div > input {
+        background-color: white;
+        color: #125336;
+        border: 1px solid #125336;
     }
     .stButton > button {
         background-color: #125336;
@@ -322,7 +343,7 @@ geocode = get_geolocator()
 col1, col2 = st.columns(2)
 with col1:
     date_text = st.text_input("Enter Date (DD:MM:YYYY):")
-    time_text = st.text_input("Enter Time (HH:MM):")
+    time_text = st.text_input("Enter Time (HH:MM) in 12-hour format:")
     ampm = st.selectbox("AM/PM:", ["AM", "PM"])
 with col2:
     # City search with suggestions
@@ -373,10 +394,6 @@ with col3:
 # Button to generate or regenerate
 if st.button("Generate Chart", use_container_width=True):
     st.session_state.chart_data = compute_chart(date_text, time_text, ampm, lat, lon, tz_offset, max_depth)
-    # Reset dropdown indices on regenerate
-    for key in ['selected_dasa_idx', 'selected_bhukti_idx', 'selected_anthara_idx', 'selected_sukshma_idx', 'selected_prana_idx']:
-        if key in st.session_state:
-            del st.session_state[key]
     st.rerun()
 
 # Display chart if computed
@@ -385,7 +402,7 @@ if st.session_state.chart_data:
     st.subheader("=== PLANETARY DETAILS ===")
     st.table(chart_data['df_planets'])
 
-    st.subheader("=== RASI CHART (South Indian Style - Text Representation) ===")
+    st.subheader("=== RASI CHART ===")
     st.write(f"Lagna: {chart_data['lagna_sign']} ({chart_data['lagna_sid']:.2f}°)")
     st.table(chart_data['df_rasi'])
 
@@ -393,126 +410,81 @@ if st.session_state.chart_data:
     st.write(f"Navamsa Lagna: {chart_data['nav_lagna_sign']} ({chart_data['nav_lagna']:.2f}°)")
     st.table(chart_data['df_nav'])
 
-    st.subheader(f"=== VIMSHOTTARI {chart_data['selected_depth'].upper()} (Nested Dropdowns for Navigation) ===")
-
-    # Nested dropdowns with reset on parent change
-    if 'selected_dasa_idx' not in st.session_state:
-        st.session_state.selected_dasa_idx = 0
-        st.session_state.selected_bhukti_idx = 0
-        st.session_state.selected_anthara_idx = 0
-        st.session_state.selected_sukshma_idx = 0
-        st.session_state.selected_prana_idx = 0
+    st.subheader(f"=== VIMSHOTTARI {chart_data['selected_depth'].upper()} ===")
 
     dasa_periods_filtered = chart_data['dasa_periods_filtered']
     utc_dt = chart_data['utc_dt']
+    max_depth = chart_data['max_depth']
 
-    # Dasa selection
-    if dasa_periods_filtered:
-        dasa_names = [p[0] for p in dasa_periods_filtered]
-        selected_dasa_name = st.selectbox("Select Dasa:", options=dasa_names, index=st.session_state.selected_dasa_idx, key="dasa_select")
-        current_dasa_idx = dasa_names.index(selected_dasa_name)
-        if current_dasa_idx != st.session_state.selected_dasa_idx:
-            # Reset children on change
-            st.session_state.selected_bhukti_idx = 0
-            st.session_state.selected_anthara_idx = 0
-            st.session_state.selected_sukshma_idx = 0
-            st.session_state.selected_prana_idx = 0
-        st.session_state.selected_dasa_idx = current_dasa_idx
-        selected_dasa_period = dasa_periods_filtered[current_dasa_idx]
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown(f"**Dasa Planet:** {selected_dasa_period[0]}")
-            st.markdown(f"**Start:** {selected_dasa_period[1].strftime('%Y-%m-%d')}")
-        with col2:
-            st.markdown(f"**End:** {selected_dasa_period[2].strftime('%Y-%m-%d')}")
+    # Dasa Table
+    dasa_data = []
+    for lord, start, end, _ in dasa_periods_filtered:
+        dur = end - start
+        dasa_data.append({'Planet': lord, 'Start': start.strftime('%Y-%m-%d'), 'End': end.strftime('%Y-%m-%d'), 'Duration': duration_str(dur)})
+    df_dasa = pd.DataFrame(dasa_data)
+    st.table(df_dasa)
 
-        # Bhukti if depth >=2
-        if max_depth >= 2:
-            bhuktis = selected_dasa_period[3]
-            if bhuktis:
-                bhukti_names = [p[0] for p in bhuktis]
-                selected_bhukti_name = st.selectbox("Select Bhukti:", options=bhukti_names, index=st.session_state.selected_bhukti_idx, key="bhukti_select")
-                current_bhukti_idx = bhukti_names.index(selected_bhukti_name)
-                if current_bhukti_idx != st.session_state.selected_bhukti_idx:
-                    # Reset children on change
-                    st.session_state.selected_anthara_idx = 0
-                    st.session_state.selected_sukshma_idx = 0
-                    st.session_state.selected_prana_idx = 0
-                st.session_state.selected_bhukti_idx = current_bhukti_idx
-                selected_bhukti_period = bhuktis[current_bhukti_idx]
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown(f"**Bhukti Planet:** {selected_bhukti_period[0]}")
-                    st.markdown(f"**Start:** {selected_bhukti_period[1].strftime('%Y-%m-%d')}")
-                with col2:
-                    st.markdown(f"**End:** {selected_bhukti_period[2].strftime('%Y-%m-%d')}")
-            else:
-                st.write("No Bhuktis available.")
+    # Nested for deeper levels using expanders and selects
+    if max_depth >= 2:
+        with st.expander("Bhuktis (Select Dasa to view)"):
+            if dasa_periods_filtered:
+                dasa_options = {i: f"{p[0]} ({p[1].strftime('%Y-%m-%d')} - {p[2].strftime('%Y-%m-%d')})" for i, p in enumerate(dasa_periods_filtered)}
+                selected_dasa_idx = st.selectbox("Select Dasa:", options=list(dasa_options.values()), index=0, format_func=lambda x: x)
+                sel_idx = list(dasa_options.keys())[list(dasa_options.values()).index(selected_dasa_idx)]
+                selected_dasa_period = dasa_periods_filtered[sel_idx]
+                bhuktis = selected_dasa_period[3]
+                bhukti_data = []
+                for b_lord, b_start, b_end, _ in bhuktis:
+                    dur = b_end - b_start
+                    bhukti_data.append({'Planet': b_lord, 'Start': b_start.strftime('%Y-%m-%d'), 'End': b_end.strftime('%Y-%m-%d'), 'Duration': duration_str(dur)})
+                df_bhukti = pd.DataFrame(bhukti_data)
+                st.table(df_bhukti)
 
-            # Anthara if depth >=3
-            if max_depth >= 3 and bhuktis:
-                antharas = selected_bhukti_period[3]
-                if antharas:
-                    anthara_names = [p[0] for p in antharas]
-                    selected_anthara_name = st.selectbox("Select Anthara:", options=anthara_names, index=st.session_state.selected_anthara_idx, key="anthara_select")
-                    current_anthara_idx = anthara_names.index(selected_anthara_name)
-                    if current_anthara_idx != st.session_state.selected_anthara_idx:
-                        # Reset children on change
-                        st.session_state.selected_sukshma_idx = 0
-                        st.session_state.selected_prana_idx = 0
-                    st.session_state.selected_anthara_idx = current_anthara_idx
-                    selected_anthara_period = antharas[current_anthara_idx]
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.markdown(f"**Anthara Planet:** {selected_anthara_period[0]}")
-                        st.markdown(f"**Start:** {selected_anthara_period[1].strftime('%Y-%m-%d %H:%M')}")
-                    with col2:
-                        st.markdown(f"**End:** {selected_anthara_period[2].strftime('%Y-%m-%d %H:%M')}")
-                else:
-                    st.write("No Antharas available.")
+                if max_depth >= 3:
+                    with st.expander("Antharas (Select Bhukti to view)"):
+                        if bhuktis:
+                            bhukti_options = {j: f"{p[0]} ({p[1].strftime('%Y-%m-%d')} - {p[2].strftime('%Y-%m-%d')})" for j, p in enumerate(bhuktis)}
+                            selected_bhukti_idx = st.selectbox("Select Bhukti:", options=list(bhukti_options.values()), index=0, format_func=lambda x: x)
+                            sel_b_idx = list(bhukti_options.keys())[list(bhukti_options.values()).index(selected_bhukti_idx)]
+                            selected_bhukti_period = bhuktis[sel_b_idx]
+                            antharas = selected_bhukti_period[3]
+                            anthara_data = []
+                            for a_lord, a_start, a_end, _ in antharas:
+                                dur = a_end - a_start
+                                anthara_data.append({'Planet': a_lord, 'Start': a_start.strftime('%Y-%m-%d %H:%M'), 'End': a_end.strftime('%Y-%m-%d %H:%M'), 'Duration': duration_str(dur)})
+                            df_anthara = pd.DataFrame(anthara_data)
+                            st.table(df_anthara)
 
-                # Sukshma if depth >=4
-                if max_depth >= 4 and antharas:
-                    sukshmas = selected_anthara_period[3]
-                    if sukshmas:
-                        sukshma_names = [p[0] for p in sukshmas]
-                        selected_sukshma_name = st.selectbox("Select Sukshma:", options=sukshma_names, index=st.session_state.selected_sukshma_idx, key="sukshma_select")
-                        current_sukshma_idx = sukshma_names.index(selected_sukshma_name)
-                        if current_sukshma_idx != st.session_state.selected_sukshma_idx:
-                            # Reset prana on change
-                            st.session_state.selected_prana_idx = 0
-                        st.session_state.selected_sukshma_idx = current_sukshma_idx
-                        selected_sukshma_period = sukshmas[current_sukshma_idx]
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.markdown(f"**Sukshma Planet:** {selected_sukshma_period[0]}")
-                            st.markdown(f"**Start:** {selected_sukshma_period[1].strftime('%Y-%m-%d %H:%M')}")
-                        with col2:
-                            st.markdown(f"**End:** {selected_sukshma_period[2].strftime('%Y-%m-%d %H:%M')}")
-                    else:
-                        st.write("No Sukshmas available.")
+                            if max_depth >= 4:
+                                with st.expander("Sukshmas (Select Anthara to view)"):
+                                    if antharas:
+                                        anthara_options = {k: f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" for k, p in enumerate(antharas)}
+                                        selected_anthara_idx = st.selectbox("Select Anthara:", options=list(anthara_options.values()), index=0, format_func=lambda x: x)
+                                        sel_a_idx = list(anthara_options.keys())[list(anthara_options.values()).index(selected_anthara_idx)]
+                                        selected_anthara_period = antharas[sel_a_idx]
+                                        sukshmas = selected_anthara_period[3]
+                                        sukshma_data = []
+                                        for s_lord, s_start, s_end, _ in sukshmas:
+                                            dur = s_end - s_start
+                                            sukshma_data.append({'Planet': s_lord, 'Start': s_start.strftime('%Y-%m-%d %H:%M'), 'End': s_end.strftime('%Y-%m-%d %H:%M'), 'Duration': duration_str(dur)})
+                                        df_sukshma = pd.DataFrame(sukshma_data)
+                                        st.table(df_sukshma)
 
-                    # Prana if depth >=5
-                    if max_depth >= 5 and sukshmas:
-                        pranas = selected_sukshma_period[3]
-                        if pranas:
-                            prana_names = [p[0] for p in pranas]
-                            selected_prana_name = st.selectbox("Select Prana:", options=prana_names, index=st.session_state.selected_prana_idx, key="prana_select")
-                            current_prana_idx = prana_names.index(selected_prana_name)
-                            st.session_state.selected_prana_idx = current_prana_idx
-                            selected_prana_period = pranas[current_prana_idx]
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                st.markdown(f"**Prana Planet:** {selected_prana_period[0]}")
-                                st.markdown(f"**Start:** {selected_prana_period[1].strftime('%Y-%m-%d %H:%M')}")
-                            with col2:
-                                st.markdown(f"**End:** {selected_prana_period[2].strftime('%Y-%m-%d %H:%M')}")
-                        else:
-                            st.write("No Pranas available.")
-    else:
-        st.warning("No Dasa periods available.")
-
-    st.info("Note: Nested dropdowns reset child selections when parent changes. Periods are filtered from birth. Deeper levels show approximate times. Click 'Generate Chart' to update with new inputs.")
+                                        if max_depth >= 5:
+                                            with st.expander("Pranas (Select Sukshma to view)"):
+                                                if sukshmas:
+                                                    sukshma_options = {l: f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" for l, p in enumerate(sukshmas)}
+                                                    selected_sukshma_idx = st.selectbox("Select Sukshma:", options=list(sukshma_options.values()), index=0, format_func=lambda x: x)
+                                                    sel_s_idx = list(sukshma_options.keys())[list(sukshma_options.values()).index(selected_sukshma_idx)]
+                                                    selected_sukshma_period = sukshmas[sel_s_idx]
+                                                    pranas = selected_sukshma_period[3]
+                                                    prana_data = []
+                                                    for pr_lord, pr_start, pr_end, _ in pranas:
+                                                        dur = pr_end - pr_start
+                                                        prana_data.append({'Planet': pr_lord, 'Start': pr_start.strftime('%Y-%m-%d %H:%M'), 'End': pr_end.strftime('%Y-%m-%d %H:%M'), 'Duration': duration_str(dur)})
+                                                    df_prana = pd.DataFrame(prana_data)
+                                                    st.table(df_prana)
+    st.info("Note: Periods filtered from birth. Durations approximate. Deeper levels use nested expanders for navigation.")
 else:
     st.info("Enter details and click 'Generate Chart' to begin.")
 
