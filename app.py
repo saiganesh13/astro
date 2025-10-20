@@ -381,20 +381,7 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
         'Capricorn': (0, 1), 'Aquarius': (0, 2)
     }
 
-    # Draw only outer grid lines to avoid central boxes
-    # Vertical lines for outer
-    ax.plot([0, 0], [0, 4], 'k-', linewidth=1)
-    ax.plot([1, 1], [0, 4], 'k-', linewidth=1)
-    ax.plot([3, 3], [0, 4], 'k-', linewidth=1)
-    ax.plot([4, 4], [0, 4], 'k-', linewidth=1)
-    # Horizontal lines for outer
-    ax.plot([0, 4], [0, 0], 'k-', linewidth=1)
-    ax.plot([0, 4], [1, 1], 'k-', linewidth=1)
-    ax.plot([0, 4], [3, 3], 'k-', linewidth=1)
-    ax.plot([0, 4], [4, 4], 'k-', linewidth=1)
-    # Inner connections without full center grid
-    ax.plot([1, 3], [1, 1], 'k-', linewidth=1)
-    ax.plot([1, 3], [3, 3], 'k-', linewidth=1)
+    # No grid lines
 
     # Compute house for each sign based on Lagna
     lagna_sign_idx = sign_names.index(lagna_sign)
@@ -403,9 +390,13 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
         house = ((s_idx - lagna_sign_idx) % 12) + 1
         house_for_sign[sign] = house
 
-    # Plot each sign box
-    box_width = 0.75
-    box_height = 0.75
+    # Better color palette
+    colors = ['#FFF8DC', '#F0E68C', '#E6E6FA', '#F0FFF0', '#FFE4E1', '#E0FFFF', '#FFFACD', '#F5F5DC', '#DDA0DD', '#98FB98', '#F0F8FF', '#FFDAB9']
+    color_index = 0
+
+    # Plot each sign box closer
+    box_width = 0.85
+    box_height = 0.85
     for sign, (grid_x, grid_y) in sign_positions.items():
         house = house_for_sign[sign]
         planets = sorted(house_to_planets.get(house, []))
@@ -415,14 +406,18 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
             text_lines.append(planets_str[:15])  # Limit length
         text = '\n'.join(text_lines)
         
-        x = grid_x * 1 + 0.125
-        y = (3 - grid_y) * 1 + 0.125  # Invert y for top-down
-        color = 'yellow' if house == 1 else 'lightblue'
+        x = grid_x * 0.85 + 0.075
+        y = (3 - grid_y) * 0.85 + 0.075  # Invert y for top-down, closer spacing
+        if house == 1:
+            color = '#FFD700'  # Gold for Lagna
+        else:
+            color = colors[color_index % len(colors)]
+            color_index += 1
         box = FancyBboxPatch((x, y), box_width, box_height, boxstyle="round,pad=0.02", 
-                             ec="black", fc=color, alpha=0.8, linewidth=1.5)
+                             ec="black", fc=color, alpha=0.9, linewidth=1.5)
         ax.add_patch(box)
         ax.text(x + box_width/2, y + box_height/2, text, ha='center', va='center', 
-                fontsize=8, weight='bold', wrap=True)
+                fontsize=7, weight='bold', wrap=True)
 
     ax.set_xlim(0, 4)
     ax.set_ylim(0, 4)
