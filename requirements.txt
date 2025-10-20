@@ -2,3 +2,4 @@ streamlit
 astropy
 geopy
 pandas
+geolocator
