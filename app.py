@@ -258,7 +258,13 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
     lagna_idx = sign_names.index(lagna_sign)
     house_for_sign = {s: ((i - lagna_idx) % 12) + 1 for i, s in enumerate(sign_names)}
 
+    # layout params tuned for more spacing
     box_w, box_h, spacing, pad = 0.46, 0.46, 0.52, 0.02
+    top_pad_extra   = 0.012
+    line_h_min      = 0.038     # was ~0.033 -> taller minimum line step
+    line_h_max      = 0.055
+    planet_font     = 2.5
+
     for sign,(gx,gy) in sign_positions.items():
         h = house_for_sign[sign]
         planets = sorted(house_to_planets.get(h,[]))
@@ -271,15 +277,15 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
                                     alpha=0.92, linewidth=0.32))
         ax.text(x+pad, y+pad, sign[:3], ha='left', va='top', fontsize=2.7)
 
-        # --- roomier planet stacking ---
         if planets:
-            avail = box_h - (pad + 0.052)           # more space below sign
+            # shrink usable height a bit; add extra top margin
+            avail = box_h - (pad + 0.060)
             n = len(planets)
-            line_h = min(0.050, max(0.033, avail / n))  # taller minimum step
-            start_y = y + pad + 0.040               # push baseline lower
+            line_h = min(line_h_max, max(line_h_min, avail / n))
+            start_y = y + pad + 0.040 + top_pad_extra
             for i, p in enumerate(planets):
                 py = start_y + i * line_h
-                ax.text(x + box_w/2, py, p, ha='center', va='top', fontsize=2.6)
+                ax.text(x + box_w/2, py, p, ha='center', va='top', fontsize=planet_font)
 
     ax.set_xlim(0,3); ax.set_ylim(0,3); ax.set_aspect('equal'); ax.invert_yaxis()
     ax.set_title(title, fontsize=3.6, fontweight='normal')
