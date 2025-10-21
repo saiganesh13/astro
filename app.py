@@ -249,10 +249,12 @@ def plot_north_indian_style(ax, house_to_planets, house_to_sign, title):
     ax.axis('off')
 
 def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
-    sign_positions = {'Pisces':(0,3),'Aries':(1,3),'Taurus':(2,3),'Gemini':(3,3),
-                      'Cancer':(3,2),'Leo':(3,1),'Virgo':(3,0),
-                      'Libra':(2,0),'Scorpio':(1,0),'Sagittarius':(0,0),
-                      'Capricorn':(0,1),'Aquarius':(0,2)}
+    sign_positions = {
+        'Pisces':(0,3),'Aries':(1,3),'Taurus':(2,3),'Gemini':(3,3),
+        'Cancer':(3,2),'Leo':(3,1),'Virgo':(3,0),
+        'Libra':(2,0),'Scorpio':(1,0),'Sagittarius':(0,0),
+        'Capricorn':(0,1),'Aquarius':(0,2)
+    }
     lagna_idx = sign_names.index(lagna_sign)
     house_for_sign = {s: ((i - lagna_idx) % 12) + 1 for i, s in enumerate(sign_names)}
 
@@ -260,20 +262,24 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
     for sign,(gx,gy) in sign_positions.items():
         h = house_for_sign[sign]
         planets = sorted(house_to_planets.get(h,[]))
-        x = gx*spacing + 0.22; y = (3-gy)*spacing + 0.22  # invert later
+        x = gx*spacing + 0.22
+        y = (3-gy)*spacing + 0.22
 
-        ax.add_patch(FancyBboxPatch((x,y),box_w,box_h,boxstyle="round,pad=0.004",
-                                    ec="black",fc="#F5F5F5",alpha=0.92,linewidth=0.32))
+        ax.add_patch(FancyBboxPatch((x,y), box_w, box_h,
+                                    boxstyle="round,pad=0.004",
+                                    ec="black", fc="#F5F5F5",
+                                    alpha=0.92, linewidth=0.32))
         ax.text(x+pad, y+pad, sign[:3], ha='left', va='top', fontsize=2.7)
+
+        # --- roomier planet stacking ---
         if planets:
-            # Larger minimum spacing + smaller font
-            avail = box_h - (pad + 0.045)
+            avail = box_h - (pad + 0.052)           # more space below sign
             n = len(planets)
-            line_h = min(0.042, max(0.028, avail / n))  # clamp, more generous
-            start_y = y + pad + 0.036
+            line_h = min(0.050, max(0.033, avail / n))  # taller minimum step
+            start_y = y + pad + 0.040               # push baseline lower
             for i, p in enumerate(planets):
-                py = start_y + i*line_h
-                ax.text(x + box_w/2, py, p, ha='center', va='top', fontsize=2.9)  # plain, small
+                py = start_y + i * line_h
+                ax.text(x + box_w/2, py, p, ha='center', va='top', fontsize=2.6)
 
     ax.set_xlim(0,3); ax.set_ylim(0,3); ax.set_aspect('equal'); ax.invert_yaxis()
     ax.set_title(title, fontsize=3.6, fontweight='normal')
