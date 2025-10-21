@@ -356,18 +356,27 @@ def plot_north_indian_style(ax, house_to_planets, house_to_sign, title):
     ax.plot([-0.4, -0.4], [-0.4, 0.4], 'k-', linewidth=1)
     ax.plot([0.4, 0.4], [-0.4, 0.4], 'k-', linewidth=1)
 
-    box_size = 0.25  # Uniform box size for identical dimensions
+    box_size = 0.25  # Uniform square box size
     half_box = box_size / 2
 
     for house in range(1, 13):
         x, y = house_positions[house]
         sign = house_to_sign.get(house, '')
-        planets = ', '.join(house_to_planets.get(house, []))
-        text = f'H{house}\n{sign[:3]}\n{planets[:10]}'  # Abbreviate
+        planets_list = sorted(house_to_planets.get(house, []))
         color = '#F5F5F5'  # Light uniform color
         box = FancyBboxPatch((x - half_box, y - half_box), box_size, box_size, boxstyle="round,pad=0.02", ec="black", fc=color, alpha=0.8)
         ax.add_patch(box)
-        ax.text(x, y, text, ha='center', va='center', fontsize=7, weight='bold')  # Slightly smaller font
+        
+        # Sign plain text at top
+        ax.text(x, y + 0.04, sign[:3], ha='center', va='center', fontsize=7)
+        
+        # Planets bold below
+        if planets_list:
+            line_height = 0.03
+            start_y = y - 0.02
+            for i, planet in enumerate(planets_list):
+                py = start_y - i * line_height
+                ax.text(x, py, planet[:6], ha='center', va='center', fontsize=6, fontweight='bold')
 
     ax.set_xlim(-1, 1)
     ax.set_ylim(-1, 1)
@@ -396,29 +405,34 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
     # Uniform light color
     uniform_color = '#F5F5F5'
 
-    # Smaller box dimensions for compact chart
+    # Square box dimensions
     box_width = 0.7
     box_height = 0.7
     spacing = 0.7
 
-    # Plot each sign box closer
+    # Plot each sign box
     for sign, (grid_x, grid_y) in sign_positions.items():
         house = house_for_sign[sign]
-        planets = sorted(house_to_planets.get(house, []))
-        planets_str = '\n'.join(planets) if planets else ''
-        text_lines = [sign[:3], f'H{house}']
-        if planets_str:
-            text_lines.append(planets_str[:15])  # Limit length
-        text = '\n'.join(text_lines)
+        planets_list = sorted(house_to_planets.get(house, []))
         
         x = grid_x * spacing + 0.15
-        y = (3 - grid_y) * spacing + 0.15  # Invert y for top-down, closer spacing
+        y = (3 - grid_y) * spacing + 0.15  # Invert y for top-down
         color = uniform_color  # Uniform color
         box = FancyBboxPatch((x, y), box_width, box_height, boxstyle="round,pad=0.02", 
                              ec="black", fc=color, alpha=0.9, linewidth=1.5)
         ax.add_patch(box)
-        ax.text(x + box_width/2, y + box_height/2, text, ha='center', va='center', 
-                fontsize=6, weight='bold', wrap=True)
+        
+        # Sign plain text at top
+        text_y = y + box_height / 2 - 0.05
+        ax.text(x + box_width / 2, text_y, sign[:3], ha='center', va='top', fontsize=7)
+        
+        # Planets bold below
+        if planets_list:
+            line_height = 0.08
+            start_y = text_y - 0.04
+            for i, planet in enumerate(planets_list):
+                py = start_y - i * line_height
+                ax.text(x + box_width / 2, py, planet, ha='center', va='center', fontsize=6, fontweight='bold')
 
     ax.set_xlim(0, 3.5)
     ax.set_ylim(0, 3.5)
