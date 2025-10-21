@@ -212,7 +212,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         'house_to_planets_rasi': house_planets_rasi, 'house_to_planets_nav': house_planets_nav
     }
 
-# ---- Plotters (smaller fonts, adaptive spacing, left-top sign, tiny plain titles) ----
+# ---- Plotters (smaller fonts, larger spacing, left-top sign, tiny plain titles) ----
 def plot_north_indian_style(ax, house_to_planets, house_to_sign, title):
     scale = 0.8
     pos = {1:(0,0.5*scale),2:(-0.5*scale,0.25*scale),3:(-0.75*scale,0),4:(-0.5*scale,-0.25*scale),
@@ -233,18 +233,19 @@ def plot_north_indian_style(ax, house_to_planets, house_to_sign, title):
         ax.add_patch(FancyBboxPatch((x-half,y-half),box_size,box_size,boxstyle="round,pad=0.004",
                                     ec="black",fc="#F5F5F5",alpha=0.88,linewidth=0.3))
         # small left-top sign
-        ax.text(x-half+pad, y+half-pad, sign[:3], ha='left', va='top', fontsize=2.8)
+        ax.text(x-half+pad, y+half-pad, sign[:3], ha='left', va='top', fontsize=2.7)
         if planets:
-            avail = box_size - (pad + 0.028)
+            # Larger minimum spacing + smaller font
+            avail = box_size - (pad + 0.032)
             n = len(planets)
-            line_h = min(0.017, max(0.010, avail / n))  # clamp
-            start_y = y - half + pad + 0.02
+            line_h = min(0.020, max(0.0145, avail / n))  # clamp, more generous
+            start_y = y - half + pad + 0.022
             for i, p in enumerate(planets):
                 py = start_y + i*line_h
-                ax.text(x, py, p[:5], ha='center', va='center', fontsize=3.0)  # smaller, plain
+                ax.text(x, py, p[:5], ha='center', va='center', fontsize=2.9)  # plain, small
 
     ax.set_xlim(-1,1); ax.set_ylim(-1,1); ax.set_aspect('equal')
-    ax.set_title(title, fontsize=3.8, fontweight='normal')  # tiny plain title
+    ax.set_title(title, fontsize=3.6, fontweight='normal')  # tiny plain title
     ax.axis('off')
 
 def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
@@ -263,18 +264,19 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
 
         ax.add_patch(FancyBboxPatch((x,y),box_w,box_h,boxstyle="round,pad=0.004",
                                     ec="black",fc="#F5F5F5",alpha=0.92,linewidth=0.32))
-        ax.text(x+pad, y+pad, sign[:3], ha='left', va='top', fontsize=2.8)  # smaller sign
+        ax.text(x+pad, y+pad, sign[:3], ha='left', va='top', fontsize=2.7)
         if planets:
-            avail = box_h - (pad + 0.04)
+            # Larger minimum spacing + smaller font
+            avail = box_h - (pad + 0.045)
             n = len(planets)
-            line_h = min(0.040, max(0.024, avail / n))  # clamp
-            start_y = y + pad + 0.034
+            line_h = min(0.042, max(0.028, avail / n))  # clamp, more generous
+            start_y = y + pad + 0.036
             for i, p in enumerate(planets):
                 py = start_y + i*line_h
-                ax.text(x + box_w/2, py, p, ha='center', va='top', fontsize=3.0)  # smaller, plain
+                ax.text(x + box_w/2, py, p, ha='center', va='top', fontsize=2.9)  # plain, small
 
     ax.set_xlim(0,3); ax.set_ylim(0,3); ax.set_aspect('equal'); ax.invert_yaxis()
-    ax.set_title(title, fontsize=3.8, fontweight='normal')  # tiny plain title
+    ax.set_title(title, fontsize=3.6, fontweight='normal')
     ax.axis('off')
 
 # ---- Streamlit UI ----
@@ -423,8 +425,10 @@ if st.session_state.chart_data:
                 plot_north_indian_style(ax, cd['house_to_planets_rasi'], house_to_sign_rasi, 'Rasi Chart (North Indian)')
             else:
                 plot_south_indian_style(ax, cd['house_to_planets_rasi'], cd['lagna_sign'], 'Rasi Chart (South Indian)')
-            if render_svg: show_svg(fig)
-            else: show_png(fig)
+            if render_svg:
+                show_svg(fig)
+            else:
+                show_png(fig)
 
         with col2:
             fig, ax = plt.subplots(figsize=size)
@@ -432,19 +436,103 @@ if st.session_state.chart_data:
                 plot_north_indian_style(ax, cd['house_to_planets_nav'], house_to_sign_nav, 'Navamsa Chart (North Indian)')
             else:
                 plot_south_indian_style(ax, cd['house_to_planets_nav'], cd['nav_lagna_sign'], 'Navamsa Chart (South Indian)')
-            if render_svg: show_svg(fig)
-            else: show_png(fig)
+            if render_svg:
+                show_svg(fig)
+            else:
+                show_png(fig)
 
     st.subheader("House Analysis")
     st.dataframe(cd['df_house_status'], hide_index=True, use_container_width=True)
 
+    # ---------- Vimshottari with nested expanders (ALL levels restored) ----------
     st.subheader(f"Vimshottari Dasa ({cd['selected_depth']})")
+
+    # Level 1: Dasa
     dasa_rows = [{'Planet': lord, 'Start': s.strftime('%Y-%m-%d'),
                   'End': e.strftime('%Y-%m-%d'), 'Duration': duration_str(e-s,'dasa')}
                  for lord, s, e, _ in cd['dasa_periods_filtered']]
-    st.dataframe(pd.DataFrame(dasa_rows), hide_index=True, use_container_width=True)
+    df_dasa = pd.DataFrame(dasa_rows)
+    st.dataframe(df_dasa, hide_index=True, use_container_width=True)
 
-    # nested expanders unchanged (omitted here for brevity—keep your previous version if needed)
+    max_depth = cd['max_depth']
+    dasa_periods_filtered = cd['dasa_periods_filtered']
+
+    # Level 2: Bhukti
+    if max_depth >= 2:
+        with st.expander("View Bhuktis (Sub-periods)", expanded=False):
+            if dasa_periods_filtered:
+                dasa_options = [f"{p[0]} ({p[1].strftime('%Y-%m-%d')} - {p[2].strftime('%Y-%m-%d')})" for p in dasa_periods_filtered]
+                selected_dasa = st.selectbox("Select Dasa:", dasa_options, key="dasa_select")
+                sel_idx = dasa_options.index(selected_dasa)
+                bhuktis = dasa_periods_filtered[sel_idx][3]
+
+                bhukti_rows = [{'Planet': b_lord, 'Start': b_start.strftime('%Y-%m-%d'),
+                                'End': b_end.strftime('%Y-%m-%d'),
+                                'Duration': duration_str(b_end-b_start, 'bhukti')}
+                               for b_lord, b_start, b_end, _ in bhuktis]
+                st.dataframe(pd.DataFrame(bhukti_rows), hide_index=True, use_container_width=True)
+
+                # Level 3: Anthara
+                if max_depth >= 3:
+                    with st.expander("View Antharas", expanded=False):
+                        if bhuktis:
+                            bhukti_options = [f"{p[0]} ({p[1].strftime('%Y-%m-%d')} - {p[2].strftime('%Y-%m-%d')})" for p in bhuktis]
+                            selected_bhukti = st.selectbox("Select Bhukti:", bhukti_options, key="bhukti_select")
+                            sel_b_idx = bhukti_options.index(selected_bhukti)
+                            antharas = bhuktis[sel_b_idx][3]
+
+                            anthara_rows = [{'Planet': a_lord, 'Start': a_start.strftime('%Y-%m-%d %H:%M'),
+                                             'End': a_end.strftime('%Y-%m-%d %H:%M'),
+                                             'Duration': duration_str(a_end-a_start, 'anthara')}
+                                            for a_lord, a_start, a_end, _ in antharas]
+                            st.dataframe(pd.DataFrame(anthara_rows), hide_index=True, use_container_width=True)
+
+                            # Level 4: Sukshma
+                            if max_depth >= 4:
+                                with st.expander("View Sukshmas", expanded=False):
+                                    if antharas:
+                                        anthara_options = [f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" for p in antharas]
+                                        selected_anthara = st.selectbox("Select Anthara:", anthara_options, key="anthara_select")
+                                        sel_a_idx = anthara_options.index(selected_anthara)
+                                        sukshmas = antharas[sel_a_idx][3]
+
+                                        sukshma_rows = [{'Planet': s_lord, 'Start': s_start.strftime('%Y-%m-%d %H:%M'),
+                                                         'End': s_end.strftime('%Y-%m-%d %H:%M'),
+                                                         'Duration': duration_str(s_end-s_start, 'sukshma')}
+                                                        for s_lord, s_start, s_end, _ in sukshmas]
+                                        st.dataframe(pd.DataFrame(sukshma_rows), hide_index=True, use_container_width=True)
+
+                                        # Level 5: Prana
+                                        if max_depth >= 5:
+                                            with st.expander("View Pranas", expanded=False):
+                                                if sukshmas:
+                                                    sukshma_options = [f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" for p in sukshmas]
+                                                    selected_sukshma = st.selectbox("Select Sukshma:", sukshma_options, key="sukshma_select")
+                                                    sel_s_idx = sukshma_options.index(selected_sukshma)
+                                                    pranas = sukshmas[sel_s_idx][3]
+
+                                                    prana_rows = [{'Planet': pr_lord, 'Start': pr_start.strftime('%Y-%m-%d %H:%M'),
+                                                                   'End': pr_end.strftime('%Y-%m-%d %H:%M'),
+                                                                   'Duration': duration_str(pr_end-pr_start, 'prana')}
+                                                                  for pr_lord, pr_start, pr_end, _ in pranas]
+                                                    st.dataframe(pd.DataFrame(prana_rows), hide_index=True, use_container_width=True)
+
+                                                    # Level 6: Sub-Prana
+                                                    if max_depth >= 6:
+                                                        with st.expander("View Sub-Pranas", expanded=False):
+                                                            if pranas:
+                                                                prana_options = [f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" for p in pranas]
+                                                                selected_prana = st.selectbox("Select Prana:", prana_options, key="prana_select")
+                                                                sel_pr_idx = prana_options.index(selected_prana)
+                                                                sub_pranas = pranas[sel_pr_idx][3]
+
+                                                                sub_rows = [{'Planet': sp_lord, 'Start': sp_start.strftime('%Y-%m-%d %H:%M'),
+                                                                             'End': sp_end.strftime('%Y-%m-%d %H:%M'),
+                                                                             'Duration': duration_str(sp_end-sp_start, 'sub_prana')}
+                                                                            for sp_lord, sp_start, sp_end, _ in sub_pranas]
+                                                                st.dataframe(pd.DataFrame(sub_rows), hide_index=True, use_container_width=True)
+
+    st.info("Note: Periods are filtered from birth time and durations are approximate.")
 else:
     st.info("Enter details above and click 'Generate Chart' to begin")
 
