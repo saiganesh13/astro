@@ -689,11 +689,11 @@ if st.session_state.chart_data:
         for h in range(1, 13):
             sign_start = (chart_data['lagna_sid'] + (h - 1) * 30) % 360
             house_to_sign_rasi[h] = get_sign(sign_start)
-        fig, ax = plt.subplots(figsize=(3, 3))  # Even smaller figure size
+        fig, ax = plt.subplots(figsize=(1, 1))  # Even smaller figure size
         plot_north_indian_style(ax, chart_data['house_to_planets_rasi'], house_to_sign_rasi, 'Rasi Chart (North Indian)')
         st.pyplot(fig)
     elif chart_style == "South Indian":
-        fig, ax = plt.subplots(figsize=(3, 3))  # Even smaller figure size
+        fig, ax = plt.subplots(figsize=(1, 1))  # Even smaller figure size
         plot_south_indian_style(ax, chart_data['house_to_planets_rasi'], chart_data['lagna_sign'], 'Rasi Chart (South Indian)')
         st.pyplot(fig)
     
@@ -712,11 +712,11 @@ if st.session_state.chart_data:
         for h in range(1, 13):
             sign_start = (chart_data['nav_lagna'] + (h - 1) * 30) % 360
             house_to_sign_nav[h] = get_sign(sign_start)
-        fig, ax = plt.subplots(figsize=(3, 3))  # Even smaller figure size
+        fig, ax = plt.subplots(figsize=(1, 1))  # Even smaller figure size
         plot_north_indian_style(ax, chart_data['house_to_planets_nav'], house_to_sign_nav, 'Navamsa Chart (North Indian)')
         st.pyplot(fig)
     elif chart_style == "South Indian":
-        fig, ax = plt.subplots(figsize=(3, 3))  # Even smaller figure size
+        fig, ax = plt.subplots(figsize=(1, 1))  # Even smaller figure size
         plot_south_indian_style(ax, chart_data['house_to_planets_nav'], chart_data['nav_lagna_sign'], 'Navamsa Chart (South Indian)')
         st.pyplot(fig)
     
