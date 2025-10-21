@@ -327,36 +327,37 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     }
 
 def plot_north_indian_style(ax, house_to_planets, house_to_sign, title):
-    # North Indian chart positions (diamond shape)
+    # Scaled down positions for smaller chart
+    scale = 0.8
     house_positions = {
-        1: (0, 0.5),   # Lagna
-        2: (-0.5, 0.25),
-        3: (-0.75, 0),
-        4: (-0.5, -0.25),
-        5: (0, -0.5),
-        6: (0.5, -0.25),
-        7: (0.75, 0),
-        8: (0.5, 0.25),
-        9: (0.25, 0.5),
-        10: (0.5, 0.75),
-        11: (-0.25, 0.75),
-        12: (-0.5, 0.5)
+        1: (0, 0.5 * scale),   # Lagna
+        2: (-0.5 * scale, 0.25 * scale),
+        3: (-0.75 * scale, 0),
+        4: (-0.5 * scale, -0.25 * scale),
+        5: (0, -0.5 * scale),
+        6: (0.5 * scale, -0.25 * scale),
+        7: (0.75 * scale, 0),
+        8: (0.5 * scale, 0.25 * scale),
+        9: (0.25 * scale, 0.5 * scale),
+        10: (0.5 * scale, 0.75 * scale),
+        11: (-0.25 * scale, 0.75 * scale),
+        12: (-0.5 * scale, 0.5 * scale)
     }
 
-    # Draw outer diamond
-    diamond = patches.RegularPolygon((0, 0), 4, radius=0.8, orientation=radians(45), edgecolor='black', facecolor='none', linewidth=2)
+    # Draw outer diamond scaled
+    diamond = patches.RegularPolygon((0, 0), 4, radius=0.8 * scale, orientation=radians(45), edgecolor='black', facecolor='none', linewidth=1.5)
     ax.add_patch(diamond)
 
-    # Draw inner lines for divisions
-    ax.plot([0, 0], [-0.8, 0.8], 'k-', linewidth=1)
-    ax.plot([-0.8, 0.8], [0, 0], 'k-', linewidth=1)
+    # Draw inner lines for divisions scaled
+    ax.plot([0, 0], [-0.8 * scale, 0.8 * scale], 'k-', linewidth=0.8)
+    ax.plot([-0.8 * scale, 0.8 * scale], [0, 0], 'k-', linewidth=0.8)
     # Additional divisions
-    ax.plot([-0.4, 0.4], [0.4, 0.4], 'k-', linewidth=1)
-    ax.plot([-0.4, 0.4], [-0.4, -0.4], 'k-', linewidth=1)
-    ax.plot([-0.4, -0.4], [-0.4, 0.4], 'k-', linewidth=1)
-    ax.plot([0.4, 0.4], [-0.4, 0.4], 'k-', linewidth=1)
+    ax.plot([-0.4 * scale, 0.4 * scale], [0.4 * scale, 0.4 * scale], 'k-', linewidth=0.8)
+    ax.plot([-0.4 * scale, 0.4 * scale], [-0.4 * scale, -0.4 * scale], 'k-', linewidth=0.8)
+    ax.plot([-0.4 * scale, -0.4 * scale], [-0.4 * scale, 0.4 * scale], 'k-', linewidth=0.8)
+    ax.plot([0.4 * scale, 0.4 * scale], [-0.4 * scale, 0.4 * scale], 'k-', linewidth=0.8)
 
-    box_size = 0.25  # Uniform square box size
+    box_size = 0.2  # Smaller uniform square box size
     half_box = box_size / 2
 
     for house in range(1, 13):
@@ -364,24 +365,24 @@ def plot_north_indian_style(ax, house_to_planets, house_to_sign, title):
         sign = house_to_sign.get(house, '')
         planets_list = sorted(house_to_planets.get(house, []))
         color = '#F5F5F5'  # Light uniform color
-        box = FancyBboxPatch((x - half_box, y - half_box), box_size, box_size, boxstyle="round,pad=0.02", ec="black", fc=color, alpha=0.8)
+        box = FancyBboxPatch((x - half_box, y - half_box), box_size, box_size, boxstyle="round,pad=0.01", ec="black", fc=color, alpha=0.8)
         ax.add_patch(box)
         
-        # Sign plain text at top
-        ax.text(x, y + 0.04, sign[:3], ha='center', va='center', fontsize=7)
+        # Sign plain text smaller at top
+        ax.text(x, y + 0.03, sign[:3], ha='center', va='center', fontsize=5.5)
         
-        # Planets bold below
+        # Planets bold larger below
         if planets_list:
-            line_height = 0.03
-            start_y = y - 0.02
+            line_height = 0.025
+            start_y = y - 0.015
             for i, planet in enumerate(planets_list):
                 py = start_y - i * line_height
-                ax.text(x, py, planet[:6], ha='center', va='center', fontsize=6, fontweight='bold')
+                ax.text(x, py, planet[:5], ha='center', va='center', fontsize=6, fontweight='bold')
 
     ax.set_xlim(-1, 1)
     ax.set_ylim(-1, 1)
     ax.set_aspect('equal')
-    ax.set_title(title)
+    ax.set_title(title, fontsize=9)
     ax.axis('off')
 
 def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
@@ -405,40 +406,40 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
     # Uniform light color
     uniform_color = '#F5F5F5'
 
-    # Square box dimensions
-    box_width = 0.7
-    box_height = 0.7
-    spacing = 0.7
+    # Smaller square box dimensions
+    box_width = 0.55
+    box_height = 0.55
+    spacing = 0.55
 
     # Plot each sign box
     for sign, (grid_x, grid_y) in sign_positions.items():
         house = house_for_sign[sign]
         planets_list = sorted(house_to_planets.get(house, []))
         
-        x = grid_x * spacing + 0.15
-        y = (3 - grid_y) * spacing + 0.15  # Invert y for top-down
+        x = grid_x * spacing + 0.2
+        y = (3 - grid_y) * spacing + 0.2  # Invert y for top-down
         color = uniform_color  # Uniform color
-        box = FancyBboxPatch((x, y), box_width, box_height, boxstyle="round,pad=0.02", 
-                             ec="black", fc=color, alpha=0.9, linewidth=1.5)
+        box = FancyBboxPatch((x, y), box_width, box_height, boxstyle="round,pad=0.01", 
+                             ec="black", fc=color, alpha=0.9, linewidth=1.2)
         ax.add_patch(box)
         
-        # Sign plain text at top
-        text_y = y + box_height / 2 - 0.05
-        ax.text(x + box_width / 2, text_y, sign[:3], ha='center', va='top', fontsize=7)
+        # Sign plain text smaller at top
+        text_y = y + box_height / 2 - 0.04
+        ax.text(x + box_width / 2, text_y, sign[:3], ha='center', va='top', fontsize=5.5)
         
-        # Planets bold below
+        # Planets bold larger below
         if planets_list:
-            line_height = 0.08
-            start_y = text_y - 0.04
+            line_height = 0.06
+            start_y = text_y - 0.03
             for i, planet in enumerate(planets_list):
                 py = start_y - i * line_height
                 ax.text(x + box_width / 2, py, planet, ha='center', va='center', fontsize=6, fontweight='bold')
 
-    ax.set_xlim(0, 3.5)
-    ax.set_ylim(0, 3.5)
+    ax.set_xlim(0, 3)
+    ax.set_ylim(0, 3)
     ax.set_aspect('equal')
     ax.invert_yaxis()  # Make top row at top
-    ax.set_title(title, fontsize=10, weight='bold')
+    ax.set_title(title, fontsize=9, weight='bold')
     ax.axis('off')
 
 # Streamlit UI
@@ -688,11 +689,11 @@ if st.session_state.chart_data:
         for h in range(1, 13):
             sign_start = (chart_data['lagna_sid'] + (h - 1) * 30) % 360
             house_to_sign_rasi[h] = get_sign(sign_start)
-        fig, ax = plt.subplots(figsize=(4, 4))  # Smaller figure size
+        fig, ax = plt.subplots(figsize=(3, 3))  # Even smaller figure size
         plot_north_indian_style(ax, chart_data['house_to_planets_rasi'], house_to_sign_rasi, 'Rasi Chart (North Indian)')
         st.pyplot(fig)
     elif chart_style == "South Indian":
-        fig, ax = plt.subplots(figsize=(4, 4))  # Smaller figure size
+        fig, ax = plt.subplots(figsize=(3, 3))  # Even smaller figure size
         plot_south_indian_style(ax, chart_data['house_to_planets_rasi'], chart_data['lagna_sign'], 'Rasi Chart (South Indian)')
         st.pyplot(fig)
     
@@ -711,11 +712,11 @@ if st.session_state.chart_data:
         for h in range(1, 13):
             sign_start = (chart_data['nav_lagna'] + (h - 1) * 30) % 360
             house_to_sign_nav[h] = get_sign(sign_start)
-        fig, ax = plt.subplots(figsize=(4, 4))  # Smaller figure size
+        fig, ax = plt.subplots(figsize=(3, 3))  # Even smaller figure size
         plot_north_indian_style(ax, chart_data['house_to_planets_nav'], house_to_sign_nav, 'Navamsa Chart (North Indian)')
         st.pyplot(fig)
     elif chart_style == "South Indian":
-        fig, ax = plt.subplots(figsize=(4, 4))  # Smaller figure size
+        fig, ax = plt.subplots(figsize=(3, 3))  # Even smaller figure size
         plot_south_indian_style(ax, chart_data['house_to_planets_nav'], chart_data['nav_lagna_sign'], 'Navamsa Chart (South Indian)')
         st.pyplot(fig)
     
