@@ -10,8 +10,16 @@ from geopy.extra.rate_limiter import RateLimiter
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.patches import FancyBboxPatch
+import io  # for optional SVG rendering
 
 # Note: Install required packages: pip install streamlit astropy geopy pandas matplotlib
+
+# --- GLOBAL MATPLOTLIB DEFAULTS (CRISP + THIN) ---
+plt.rcParams.update({
+    "figure.dpi": 300,      # high-resolution figure rendering
+    "savefig.dpi": 300,
+    "lines.linewidth": 0.3  # thin default line width
+})
 
 # City data fallback (Indian cities)
 cities_fallback = {
@@ -169,7 +177,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
             raise ValueError("Invalid time format")
     except:
         raise ValueError("Time must be in HH:MM format (24-hour)")
-    
+
     local_dt = datetime.combine(date_obj, datetime.min.time().replace(hour=hour, minute=minute))
     utc_dt = local_dt - timedelta(hours=tz_offset)
     t = Time(utc_dt)
@@ -296,13 +304,9 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
 
     nav_lagna_sign = get_sign(nav_lagna)
     
-    # Moon nakshatra for summary
     moon_nak, moon_pada, moon_ld, moon_sl = get_nakshatra_details(moon_lon)
 
-    # Prepare house to planet mapping for charts
     house_to_planets_rasi = house_planets_rasi
-
-    # For Navamsa
     house_to_planets_nav = house_planets_nav
 
     return {
@@ -326,67 +330,61 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         'house_to_planets_nav': house_to_planets_nav
     }
 
+# --- THIN/CRISP CHART DRAWING FUNCTIONS ---
 def plot_north_indian_style(ax, house_to_planets, house_to_sign, title):
-    # Scaled down positions for smaller chart
     scale = 0.8
     house_positions = {
-        1: (0, 0.5 * scale),   # Lagna
-        2: (-0.5 * scale, 0.25 * scale),
-        3: (-0.75 * scale, 0),
-        4: (-0.5 * scale, -0.25 * scale),
-        5: (0, -0.5 * scale),
-        6: (0.5 * scale, -0.25 * scale),
-        7: (0.75 * scale, 0),
-        8: (0.5 * scale, 0.25 * scale),
-        9: (0.25 * scale, 0.5 * scale),
-        10: (0.5 * scale, 0.75 * scale),
-        11: (-0.25 * scale, 0.75 * scale),
-        12: (-0.5 * scale, 0.5 * scale)
+        1: (0, 0.5 * scale),   2: (-0.5 * scale, 0.25 * scale),
+        3: (-0.75 * scale, 0), 4: (-0.5 * scale, -0.25 * scale),
+        5: (0, -0.5 * scale),  6: (0.5 * scale, -0.25 * scale),
+        7: (0.75 * scale, 0),  8: (0.5 * scale, 0.25 * scale),
+        9: (0.25 * scale, 0.5 * scale), 10: (0.5 * scale, 0.75 * scale),
+        11: (-0.25 * scale, 0.75 * scale), 12: (-0.5 * scale, 0.5 * scale)
     }
 
-    # Draw outer diamond scaled
-    diamond = patches.RegularPolygon((0, 0), 4, radius=0.8 * scale, orientation=radians(45), edgecolor='black', facecolor='none', linewidth=1.5)
+    diamond = patches.RegularPolygon(
+        (0, 0), 4, radius=0.8 * scale, orientation=radians(45),
+        edgecolor='black', facecolor='none', linewidth=0.35
+    )
     ax.add_patch(diamond)
 
-    # Draw inner lines for divisions scaled
-    ax.plot([0, 0], [-0.8 * scale, 0.8 * scale], 'k-', linewidth=0.8)
-    ax.plot([-0.8 * scale, 0.8 * scale], [0, 0], 'k-', linewidth=0.8)
-    # Additional divisions
-    ax.plot([-0.4 * scale, 0.4 * scale], [0.4 * scale, 0.4 * scale], 'k-', linewidth=0.8)
-    ax.plot([-0.4 * scale, 0.4 * scale], [-0.4 * scale, -0.4 * scale], 'k-', linewidth=0.8)
-    ax.plot([-0.4 * scale, -0.4 * scale], [-0.4 * scale, 0.4 * scale], 'k-', linewidth=0.8)
-    ax.plot([0.4 * scale, 0.4 * scale], [-0.4 * scale, 0.4 * scale], 'k-', linewidth=0.8)
+    ax.plot([0, 0], [-0.8 * scale, 0.8 * scale], 'k-', linewidth=0.25)
+    ax.plot([-0.8 * scale, 0.8 * scale], [0, 0], 'k-', linewidth=0.25)
+    ax.plot([-0.4 * scale, 0.4 * scale], [0.4 * scale, 0.4 * scale], 'k-', linewidth=0.25)
+    ax.plot([-0.4 * scale, 0.4 * scale], [-0.4 * scale, -0.4 * scale], 'k-', linewidth=0.25)
+    ax.plot([-0.4 * scale, -0.4 * scale], [-0.4 * scale, 0.4 * scale], 'k-', linewidth=0.25)
+    ax.plot([0.4 * scale, 0.4 * scale], [-0.4 * scale, 0.4 * scale], 'k-', linewidth=0.25)
 
-    box_size = 0.2  # Smaller uniform square box size
+    box_size = 0.18
     half_box = box_size / 2
 
     for house in range(1, 13):
         x, y = house_positions[house]
         sign = house_to_sign.get(house, '')
         planets_list = sorted(house_to_planets.get(house, []))
-        color = '#F5F5F5'  # Light uniform color
-        box = FancyBboxPatch((x - half_box, y - half_box), box_size, box_size, boxstyle="round,pad=0.01", ec="black", fc=color, alpha=0.8)
+
+        box = FancyBboxPatch(
+            (x - half_box, y - half_box), box_size, box_size,
+            boxstyle="round,pad=0.01", ec="black", fc="#F5F5F5",
+            alpha=0.85, linewidth=0.35
+        )
         ax.add_patch(box)
-        
-        # Sign plain text smaller at top
-        ax.text(x, y + 0.03, sign[:3], ha='center', va='center', fontsize=5.5)
-        
-        # Planets bold larger below
+
+        ax.text(x, y + 0.028, sign[:3], ha='center', va='center', fontsize=4.2)
+
         if planets_list:
-            line_height = 0.025
-            start_y = y - 0.015
+            line_height = 0.022
+            start_y = y - 0.014
             for i, planet in enumerate(planets_list):
                 py = start_y - i * line_height
-                ax.text(x, py, planet[:5], ha='center', va='center', fontsize=6, fontweight='bold')
+                ax.text(x, py, planet[:5], ha='center', va='center', fontsize=4.6, fontweight='bold')
 
-    ax.set_xlim(-1, 1)
-    ax.set_ylim(-1, 1)
+    ax.set_xlim(-1, 1); ax.set_ylim(-1, 1)
     ax.set_aspect('equal')
-    ax.set_title(title, fontsize=9)
+    ax.set_title(title, fontsize=7.5)
     ax.axis('off')
 
 def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
-    # Fixed sign positions for South Indian chart
     sign_positions = {
         'Pisces': (0, 3), 'Aries': (1, 3), 'Taurus': (2, 3), 'Gemini': (3, 3),
         'Cancer': (3, 2), 'Leo': (3, 1), 'Virgo': (3, 0),
@@ -394,55 +392,42 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
         'Capricorn': (0, 1), 'Aquarius': (0, 2)
     }
 
-    # No grid lines
-
-    # Compute house for each sign based on Lagna
     lagna_sign_idx = sign_names.index(lagna_sign)
-    house_for_sign = {}
-    for s_idx, sign in enumerate(sign_names):
-        house = ((s_idx - lagna_sign_idx) % 12) + 1
-        house_for_sign[sign] = house
+    house_for_sign = {sign: ((idx - lagna_sign_idx) % 12) + 1
+                      for idx, sign in enumerate(sign_names)}
 
-    # Uniform light color
-    uniform_color = '#F5F5F5'
+    box_w, box_h, spacing = 0.5, 0.5, 0.55
 
-    # Smaller square box dimensions
-    box_width = 0.55
-    box_height = 0.55
-    spacing = 0.55
-
-    # Plot each sign box
-    for sign, (grid_x, grid_y) in sign_positions.items():
+    for sign, (gx, gy) in sign_positions.items():
         house = house_for_sign[sign]
         planets_list = sorted(house_to_planets.get(house, []))
-        
-        x = grid_x * spacing + 0.2
-        y = (3 - grid_y) * spacing + 0.2  # Invert y for top-down
-        color = uniform_color  # Uniform color
-        box = FancyBboxPatch((x, y), box_width, box_height, boxstyle="round,pad=0.01", 
-                             ec="black", fc=color, alpha=0.9, linewidth=1.2)
+
+        x = gx * spacing + 0.22
+        y = (3 - gy) * spacing + 0.22
+
+        box = FancyBboxPatch(
+            (x, y), box_w, box_h, boxstyle="round,pad=0.01",
+            ec="black", fc="#F5F5F5", alpha=0.9, linewidth=0.4
+        )
         ax.add_patch(box)
-        
-        # Sign plain text smaller at top
-        text_y = y + box_height / 2 - 0.04
-        ax.text(x + box_width / 2, text_y, sign[:3], ha='center', va='top', fontsize=5.5)
-        
-        # Planets bold larger below
+
+        text_y = y + box_h/2 - 0.035
+        ax.text(x + box_w/2, text_y, sign[:3], ha='center', va='top', fontsize=4.2)
+
         if planets_list:
-            line_height = 0.06
-            start_y = text_y - 0.03
+            line_height = 0.05
+            start_y = text_y - 0.028
             for i, planet in enumerate(planets_list):
                 py = start_y - i * line_height
-                ax.text(x + box_width / 2, py, planet, ha='center', va='center', fontsize=6, fontweight='bold')
+                ax.text(x + box_w/2, py, planet, ha='center', va='center', fontsize=4.8, fontweight='bold')
 
-    ax.set_xlim(0, 3)
-    ax.set_ylim(0, 3)
+    ax.set_xlim(0, 3); ax.set_ylim(0, 3)
     ax.set_aspect('equal')
-    ax.invert_yaxis()  # Make top row at top
-    ax.set_title(title, fontsize=9, weight='bold')
+    ax.invert_yaxis()
+    ax.set_title(title, fontsize=7.5, weight='bold')
     ax.axis('off')
 
-# Streamlit UI
+# --- STREAMLIT UI ---
 st.set_page_config(page_title="Sivapathy Horoscope", layout="wide")
 
 # Enhanced CSS
@@ -639,6 +624,10 @@ max_depth = list(max_depth_options.keys())[list(max_depth_options.values()).inde
 # Chart style selector
 chart_style = st.selectbox("Chart Style", ["Table", "North Indian", "South Indian"], index=2)
 
+# Optional: SVG toggle (for ultra-crisp lines)
+render_svg = st.checkbox("Render charts as SVG (crispest)", value=False,
+                         help="Vector rendering keeps lines ultra-thin at any zoom")
+
 # Generate button
 if st.button("Generate Chart", use_container_width=True):
     if not name:
@@ -658,13 +647,24 @@ if st.button("Generate Chart", use_container_width=True):
         except Exception as e:
             st.error(f"Error generating chart: {e}")
 
+# Helper renderers (no stretching)
+def show_png(fig):
+    fig.tight_layout(pad=0.2)
+    st.pyplot(fig, use_container_width=False, dpi=300)
+
+def show_svg(fig, width_px=360):
+    buf = io.BytesIO()
+    fig.savefig(buf, format="svg", bbox_inches="tight")
+    svg = buf.getvalue()
+    st.image(svg, width=width_px)
+
 # Display results
 if st.session_state.chart_data:
     chart_data = st.session_state.chart_data
     
     st.markdown("---")
     
-    # Summary Box - First thing displayed
+    # Summary Box
     st.markdown(f"""
     <div class="summary-box">
         <h3>Chart Summary</h3>
@@ -679,46 +679,44 @@ if st.session_state.chart_data:
     st.subheader("Planetary Positions")
     st.dataframe(chart_data['df_planets'], hide_index=True, use_container_width=True)
     
-    # Rasi Chart
+    # Rasi Chart (D1)
     st.subheader("Rasi Chart (D1)")
     if chart_style == "Table":
         st.dataframe(chart_data['df_rasi'], hide_index=True, use_container_width=True)
     elif chart_style == "North Indian":
-        # For North Indian, need house_to_sign_rasi
         house_to_sign_rasi = {}
         for h in range(1, 13):
             sign_start = (chart_data['lagna_sid'] + (h - 1) * 30) % 360
             house_to_sign_rasi[h] = get_sign(sign_start)
-        fig, ax = plt.subplots(figsize=(1, 1))  # Even smaller figure size
+        fig, ax = plt.subplots(figsize=(3, 3))  # fixed logical size (no stretching)
         plot_north_indian_style(ax, chart_data['house_to_planets_rasi'], house_to_sign_rasi, 'Rasi Chart (North Indian)')
-        st.pyplot(fig)
+        show_svg(fig) if render_svg else show_png(fig)
     elif chart_style == "South Indian":
-        fig, ax = plt.subplots(figsize=(1, 1))  # Even smaller figure size
+        fig, ax = plt.subplots(figsize=(3, 3))
         plot_south_indian_style(ax, chart_data['house_to_planets_rasi'], chart_data['lagna_sign'], 'Rasi Chart (South Indian)')
-        st.pyplot(fig)
+        show_svg(fig) if render_svg else show_png(fig)
     
     # House Status
     st.subheader("House Analysis")
     st.dataframe(chart_data['df_house_status'], hide_index=True, use_container_width=True)
     
-    # Navamsa Chart
+    # Navamsa Chart (D9)
     st.subheader("Navamsa Chart (D9)")
     st.write(f"Navamsa Lagna: {chart_data['nav_lagna_sign']} ({chart_data['nav_lagna']:.2f}°)")
     if chart_style == "Table":
         st.dataframe(chart_data['df_nav'], hide_index=True, use_container_width=True)
     elif chart_style == "North Indian":
-        # For Navamsa North
         house_to_sign_nav = {}
         for h in range(1, 13):
             sign_start = (chart_data['nav_lagna'] + (h - 1) * 30) % 360
             house_to_sign_nav[h] = get_sign(sign_start)
-        fig, ax = plt.subplots(figsize=(1, 1))  # Even smaller figure size
+        fig, ax = plt.subplots(figsize=(3, 3))
         plot_north_indian_style(ax, chart_data['house_to_planets_nav'], house_to_sign_nav, 'Navamsa Chart (North Indian)')
-        st.pyplot(fig)
+        show_svg(fig) if render_svg else show_png(fig)
     elif chart_style == "South Indian":
-        fig, ax = plt.subplots(figsize=(1, 1))  # Even smaller figure size
+        fig, ax = plt.subplots(figsize=(3, 3))
         plot_south_indian_style(ax, chart_data['house_to_planets_nav'], chart_data['nav_lagna_sign'], 'Navamsa Chart (South Indian)')
-        st.pyplot(fig)
+        show_svg(fig) if render_svg else show_png(fig)
     
     # Vimshottari Dasa
     st.subheader(f"Vimshottari Dasa ({chart_data['selected_depth']})")
