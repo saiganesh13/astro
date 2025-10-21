@@ -12,16 +12,16 @@ import matplotlib.patches as patches
 from matplotlib.patches import FancyBboxPatch
 import io  # for optional SVG rendering
 
-# Note: Install required packages: pip install streamlit astropy geopy pandas matplotlib
+# Note: pip install streamlit astropy geopy pandas matplotlib
 
-# --- GLOBAL MATPLOTLIB DEFAULTS (CRISP + THIN) ---
+# -------- MATPLOTLIB DEFAULTS (CRISP & THIN) --------
 plt.rcParams.update({
-    "figure.dpi": 300,      # high-resolution figure rendering
+    "figure.dpi": 300,
     "savefig.dpi": 300,
-    "lines.linewidth": 0.28 # extra-thin default line width
+    "lines.linewidth": 0.28
 })
 
-# City data fallback (Indian cities)
+# -------- CONSTANTS --------
 cities_fallback = {
     'Chennai': {'lat': 13.08, 'lon': 80.27},
     'Mumbai': {'lat': 19.07, 'lon': 72.88},
@@ -30,24 +30,19 @@ cities_fallback = {
     'Kolkata': {'lat': 22.57, 'lon': 88.36},
     'Hyderabad': {'lat': 17.39, 'lon': 78.49},
 }
-
 sign_names = ['Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo', 'Libra', 'Scorpio', 'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces']
-
 lords_full = ['Ketu', 'Venus', 'Sun', 'Moon', 'Mars', 'Rahu', 'Jupiter', 'Saturn', 'Mercury']
 lords_short = ['Ke', 'Ve', 'Su', 'Mo', 'Ma', 'Ra', 'Ju', 'Sa', 'Me']
-lords = lords_full
-
 nak_names = [
-    'Ashwini', 'Bharani', 'Krittika', 'Rohini', 'Mrigashira', 'Ardra', 'Punarvasu', 'Pushya', 'Ashlesha',
-    'Magha', 'Purva Phalguni', 'Uttara Phalguni', 'Hasta', 'Chitra', 'Swati', 'Vishakha', 'Anuradha',
-    'Jyeshta', 'Mula', 'Purva Ashadha', 'Uttara Ashadha', 'Shravana', 'Dhanishta', 'Shatabhisha',
-    'Purva Bhadrapada', 'Uttara Bhadrapada', 'Revati'
+    'Ashwini','Bharani','Krittika','Rohini','Mrigashira','Ardra','Punarvasu','Pushya','Ashlesha',
+    'Magha','Purva Phalguni','Uttara Phalguni','Hasta','Chitra','Swati','Vishakha','Anuradha',
+    'Jyeshta','Mula','Purva Ashadha','Uttara Ashadha','Shravana','Dhanishta','Shatabhisha',
+    'Purva Bhadrapada','Uttara Bhadrapada','Revati'
 ]
-
 years = [7, 20, 6, 10, 7, 18, 16, 19, 17] * 3
+sign_lords = ['Mars','Venus','Mercury','Moon','Sun','Mercury','Venus','Mars','Jupiter','Saturn','Saturn','Jupiter']
 
-sign_lords = ['Mars', 'Venus', 'Mercury', 'Moon', 'Sun', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Saturn', 'Jupiter']
-
+# -------- ASTRONOMY/AYANAMSA UTILS --------
 def get_lahiri_ayanamsa(year):
     base = 23.853
     rate = 50.2388 / 3600.0
@@ -186,20 +181,12 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     ayan = get_lahiri_ayanamsa(year)
 
     with solar_system_ephemeris.set('builtin'):
-        planet_bodies = {
-            'sun': 'sun',
-            'moon': 'moon',
-            'mercury': 'mercury',
-            'venus': 'venus',
-            'mars': 'mars',
-            'jupiter': 'jupiter',
-            'saturn': 'saturn'
-        }
+        bodies = {'sun':'sun','moon':'moon','mercury':'mercury','venus':'venus','mars':'mars','jupiter':'jupiter','saturn':'saturn'}
         lon_trop = {}
-        for name_p, body in planet_bodies.items():
+        for nm, body in bodies.items():
             p = get_body(body, t)
             ecl = p.transform_to(GeocentricTrueEcliptic())
-            lon_trop[name_p] = ecl.lon.deg
+            lon_trop[nm] = ecl.lon.deg
 
     d = jd - 2451545.0
     T = d / 36525.0
@@ -218,14 +205,14 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     asc_nak, asc_pada, asc_ld, asc_sl = get_nakshatra_details(asc_deg)
     data.append(['Asc', f"{asc_deg:.2f}", asc_sign, asc_nak, asc_pada, f"{asc_ld}/{asc_sl}"])
 
-    for p in ['sun', 'moon', 'mars', 'mercury', 'jupiter', 'venus', 'saturn', 'rahu', 'ketu']:
+    for p in ['sun','moon','mars','mercury','jupiter','venus','saturn','rahu','ketu']:
         p_name = p.capitalize()
         lon = lon_sid[p]
         sign = get_sign(lon)
         nak, pada, ld, sl = get_nakshatra_details(lon)
         data.append([p_name, f"{lon:.2f}", sign, nak, pada, f"{ld}/{sl}"])
 
-    df_planets = pd.DataFrame(data, columns=['Planet', 'Deg', 'Sign', 'Nakshatra', 'Pada', 'Ld/SL'])
+    df_planets = pd.DataFrame(data, columns=['Planet','Deg','Sign','Nakshatra','Pada','Ld/SL'])
 
     house_planets_rasi = defaultdict(list)
     positions = {**lon_sid, 'asc': lagna_sid}
@@ -236,10 +223,9 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     rasi_data = []
     for h in range(1, 13):
         sign_start = (lagna_sid + (h - 1) * 30) % 360
-        sign = get_sign(sign_start)
-        pls = ', '.join(sorted(house_planets_rasi[h])) if house_planets_rasi[h] else 'Empty'
-        rasi_data.append([f"House {h}", sign, pls])
-    df_rasi = pd.DataFrame(rasi_data, columns=['House', 'Sign', 'Planets'])
+        rasi_data.append([f"House {h}", get_sign(sign_start),
+                          ', '.join(sorted(house_planets_rasi[h])) if house_planets_rasi[h] else 'Empty'])
+    df_rasi = pd.DataFrame(rasi_data, columns=['House','Sign','Planets'])
 
     nav_lagna = (lagna_sid * 9) % 360
     house_planets_nav = defaultdict(list)
@@ -253,23 +239,14 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     nav_data = []
     for h in range(1, 13):
         nav_sign_start = (nav_lagna + (h - 1) * 30) % 360
-        nav_sign = get_sign(nav_sign_start)
-        pls = ', '.join(sorted(house_planets_nav[h])) if house_planets_nav[h] else 'Empty'
-        nav_data.append([f"House {h}", nav_sign, pls])
-    df_nav = pd.DataFrame(nav_data, columns=['House', 'Sign', 'Planets'])
+        nav_data.append([f"House {h}", get_sign(nav_sign_start),
+                         ', '.join(sorted(house_planets_nav[h])) if house_planets_nav[h] else 'Empty'])
+    df_nav = pd.DataFrame(nav_data, columns=['House','Sign','Planets'])
 
     lagna_sign = get_sign(lagna_sid)
     lagna_idx = sign_names.index(lagna_sign)
     planet_to_house = {p.capitalize(): get_house(lon_sid[p], lagna_sid) for p in lon_sid}
-    aspects_dict = {
-        'Sun': [7],
-        'Moon': [7],
-        'Mars': [4,7,8],
-        'Mercury': [7],
-        'Jupiter': [5,7,9],
-        'Venus': [7],
-        'Saturn': [3,7,10],
-    }
+    aspects_dict = {'Sun':[7],'Moon':[7],'Mars':[4,7,8],'Mercury':[7],'Jupiter':[5,7,9],'Venus':[7],'Saturn':[3,7,10]}
     house_status_data = []
     for h in range(1,13):
         sign_idx = (lagna_idx + h - 1) % 12
@@ -286,28 +263,21 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         aspect_str = ', '.join(aspecting) if aspecting else 'None'
         pls = ', '.join(sorted(house_planets_rasi[h])) if house_planets_rasi[h] else 'Empty'
         house_status_data.append([f"House {h}", pls, aspect_str, lord, f"House {lord_house}"])
-    df_house_status = pd.DataFrame(house_status_data, columns=['House', 'Planets', 'Aspects from', 'Lord', 'Lord in'])
+    df_house_status = pd.DataFrame(house_status_data, columns=['House','Planets','Aspects from','Lord','Lord in'])
 
     moon_lon = lon_sid['moon']
     dasa_start_idx, balance_years = generate_vimshottari_dasa(moon_lon)
     full_first = years[dasa_start_idx]
     passed_years = full_first - balance_years
     dasa_start_dt = utc_dt - timedelta(days=passed_years * 365.25)
-
     dasa_periods = generate_periods(dasa_start_dt, dasa_start_idx, 120, level='dasa', max_depth=max_depth)
     dasa_periods_filtered = filter_from_birth(dasa_periods, utc_dt)
 
-    max_depth_options = {1: 'Dasa only', 2: 'Dasa + Bhukti', 3: 'Dasa + Bhukti + Anthara', 
-                         4: 'Dasa + Bhukti + Anthara + Sukshma', 5: 'Dasa + Bhukti + Anthara + Sukshma + Prana',
-                         6: 'Dasa + Bhukti + Anthara + Sukshma + Prana + Sub-Prana'}
-    selected_depth = max_depth_options[max_depth]
-
-    nav_lagna_sign = get_sign(nav_lagna)
-    
-    moon_nak, moon_pada, moon_ld, moon_sl = get_nakshatra_details(moon_lon)
-
-    house_to_planets_rasi = house_planets_rasi
-    house_to_planets_nav = house_planets_nav
+    max_depth_options = {
+        1:'Dasa only', 2:'Dasa + Bhukti', 3:'Dasa + Bhukti + Anthara',
+        4:'Dasa + Bhukti + Anthara + Sukshma', 5:'Dasa + Bhukti + Anthara + Sukshma + Prana',
+        6:'Dasa + Bhukti + Anthara + Sukshma + Prana + Sub-Prana'
+    }
 
     return {
         'name': name,
@@ -319,197 +289,124 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         'lagna_sid': lagna_sid,
         'nav_lagna': nav_lagna,
         'lagna_sign': lagna_sign,
-        'nav_lagna_sign': nav_lagna_sign,
+        'nav_lagna_sign': get_sign(nav_lagna),
         'moon_rasi': get_sign(moon_lon),
-        'moon_nakshatra': moon_nak,
-        'moon_pada': moon_pada,
-        'selected_depth': selected_depth,
+        'moon_nakshatra': get_nakshatra_details(moon_lon)[0],
+        'moon_pada': get_nakshatra_details(moon_lon)[1],
+        'selected_depth': max_depth_options[max_depth],
         'utc_dt': utc_dt,
         'max_depth': max_depth,
-        'house_to_planets_rasi': house_to_planets_rasi,
-        'house_to_planets_nav': house_to_planets_nav
+        'house_to_planets_rasi': house_planets_rasi,
+        'house_to_planets_nav': house_planets_nav
     }
 
-# --- THIN/CRISP CHART DRAWING FUNCTIONS ---
+# -------- PLOTTERS (plain titles, non-bold planets, left-top sign, dynamic spacing) --------
 def plot_north_indian_style(ax, house_to_planets, house_to_sign, title):
-    # Compact visual scale
     scale = 0.8
-
-    # House positions (diamond layout)
     house_positions = {
-        1: (0, 0.5 * scale),   2: (-0.5 * scale, 0.25 * scale),
-        3: (-0.75 * scale, 0), 4: (-0.5 * scale, -0.25 * scale),
-        5: (0, -0.5 * scale),  6: (0.5 * scale, -0.25 * scale),
-        7: (0.75 * scale, 0),  8: (0.5 * scale, 0.25 * scale),
-        9: (0.25 * scale, 0.5 * scale), 10: (0.5 * scale, 0.75 * scale),
-        11: (-0.25 * scale, 0.75 * scale), 12: (-0.5 * scale, 0.5 * scale)
+        1:(0,0.5*scale),2:(-0.5*scale,0.25*scale),3:(-0.75*scale,0),4:(-0.5*scale,-0.25*scale),
+        5:(0,-0.5*scale),6:(0.5*scale,-0.25*scale),7:(0.75*scale,0),8:(0.5*scale,0.25*scale),
+        9:(0.25*scale,0.5*scale),10:(0.5*scale,0.75*scale),11:(-0.25*scale,0.75*scale),12:(-0.5*scale,0.5*scale)
     }
+    ax.add_patch(patches.RegularPolygon((0,0),4,radius=0.8*scale,orientation=radians(45),
+                                        edgecolor='black',facecolor='none',linewidth=0.3))
+    for X1,Y1,X2,Y2 in [(0,-0.8*scale,0,0.8*scale),(-0.8*scale,0,0.8*scale,0),
+                        (-0.4*scale,0.4*scale,0.4*scale,0.4*scale),(-0.4*scale,-0.4*scale,0.4*scale,-0.4*scale)]:
+        ax.plot([X1,X2],[Y1,Y2],'k-',linewidth=0.22)
+    ax.plot([-0.4*scale,-0.4*scale],[-0.4*scale,0.4*scale],'k-',linewidth=0.22)
+    ax.plot([0.4*scale,0.4*scale],[-0.4*scale,0.4*scale],'k-',linewidth=0.22)
 
-    # Outer diamond (thin stroke)
-    diamond = patches.RegularPolygon(
-        (0, 0), 4, radius=0.8 * scale, orientation=radians(45),
-        edgecolor='black', facecolor='none', linewidth=0.3
-    )
-    ax.add_patch(diamond)
+    box_size, half = 0.16, 0.08
+    pad = 0.01
 
-    # Inner divisions (extra thin)
-    ax.plot([0, 0], [-0.8 * scale, 0.8 * scale], 'k-', linewidth=0.22)
-    ax.plot([-0.8 * scale, 0.8 * scale], [0, 0], 'k-', linewidth=0.22)
-    ax.plot([-0.4 * scale, 0.4 * scale], [0.4 * scale, 0.4 * scale], 'k-', linewidth=0.22)
-    ax.plot([-0.4 * scale, 0.4 * scale], [-0.4 * scale, -0.4 * scale], 'k-', linewidth=0.22)
-    ax.plot([-0.4 * scale, -0.4 * scale], [-0.4 * scale, 0.4 * scale], 'k-', linewidth=0.22)
-    ax.plot([0.4 * scale, 0.4 * scale], [-0.4 * scale, 0.4 * scale], 'k-', linewidth=0.22)
+    for h in range(1,13):
+        x,y = house_positions[h]
+        sign = house_to_sign.get(h,'')
+        planets_list = sorted(house_to_planets.get(h,[]))
 
-    # Smaller boxes + left-top sign text
-    box_size = 0.16
-    half_box = box_size / 2
-    pad = 0.01  # small padding for corner labels
+        ax.add_patch(FancyBboxPatch((x-half,y-half),box_size,box_size,
+                                    boxstyle="round,pad=0.004",ec="black",fc="#F5F5F5",
+                                    alpha=0.88,linewidth=0.3))
 
-    for house in range(1, 13):
-        x, y = house_positions[house]
-        sign = house_to_sign.get(house, '')
-        planets_list = sorted(house_to_planets.get(house, []))
+        # left-top sign
+        ax.text(x-half+pad, y+half-pad, sign[:3], ha='left', va='top', fontsize=3.2)
 
-        box = FancyBboxPatch(
-            (x - half_box, y - half_box), box_size, box_size,
-            boxstyle="round,pad=0.004", ec="black", fc="#F5F5F5",
-            alpha=0.88, linewidth=0.3
-        )
-        ax.add_patch(box)
-
-        # LEFT-TOP corner sign label (small)
-        ax.text(x - half_box + pad, y + half_box - pad,
-                sign[:3], ha='left', va='top', fontsize=3.4)
-
-        # Planet text (bold, very small)
         if planets_list:
-            line_height = 0.019
-            start_y = y - half_box + (pad + 0.02)  # leave room for sign label above
+            avail = box_size - (pad + 0.028)       # space under sign
+            n = len(planets_list)
+            line_h = min(0.019, max(0.012, avail / max(n,1)))
+            start_y = y - half + pad + 0.02
             for i, planet in enumerate(planets_list):
-                py = start_y + i * line_height
-                ax.text(x, py, planet[:5], ha='center', va='center',
-                        fontsize=3.8, fontweight='bold')
+                py = start_y + i*line_h
+                ax.text(x, py, planet[:5], ha='center', va='center', fontsize=3.6)  # plain text
 
-    ax.set_xlim(-1, 1); ax.set_ylim(-1, 1)
-    ax.set_aspect('equal')
-    ax.set_title(title, fontsize=5.2)  # significantly smaller title
+    ax.set_xlim(-1,1); ax.set_ylim(-1,1); ax.set_aspect('equal')
+    ax.set_title(title, fontsize=4.6, fontweight='normal')
     ax.axis('off')
 
 def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
-    # Fixed sign positions for South Indian chart
-    sign_positions = {
-        'Pisces': (0, 3), 'Aries': (1, 3), 'Taurus': (2, 3), 'Gemini': (3, 3),
-        'Cancer': (3, 2), 'Leo': (3, 1), 'Virgo': (3, 0),
-        'Libra': (2, 0), 'Scorpio': (1, 0), 'Sagittarius': (0, 0),
-        'Capricorn': (0, 1), 'Aquarius': (0, 2)
-    }
+    sign_positions = {'Pisces':(0,3),'Aries':(1,3),'Taurus':(2,3),'Gemini':(3,3),
+                      'Cancer':(3,2),'Leo':(3,1),'Virgo':(3,0),
+                      'Libra':(2,0),'Scorpio':(1,0),'Sagittarius':(0,0),
+                      'Capricorn':(0,1),'Aquarius':(0,2)}
+    lagna_idx = sign_names.index(lagna_sign)
+    house_for_sign = {s: ((i - lagna_idx) % 12) + 1 for i, s in enumerate(sign_names)}
 
-    # Map signs to houses w.r.t Lagna
-    lagna_sign_idx = sign_names.index(lagna_sign)
-    house_for_sign = {sign: ((idx - lagna_sign_idx) % 12) + 1
-                      for idx, sign in enumerate(sign_names)}
-
-    # Compact boxes + thin border
     box_w, box_h, spacing = 0.46, 0.46, 0.52
-    pad = 0.02  # left-top corner padding for sign label
+    pad = 0.02
+    for sign,(gx,gy) in sign_positions.items():
+        h = house_for_sign[sign]
+        planets_list = sorted(house_to_planets.get(h,[]))
+        x = gx*spacing + 0.22
+        y = (3-gy)*spacing + 0.22
 
-    for sign, (gx, gy) in sign_positions.items():
-        house = house_for_sign[sign]
-        planets_list = sorted(house_to_planets.get(house, []))
+        ax.add_patch(FancyBboxPatch((x,y),box_w,box_h,boxstyle="round,pad=0.004",
+                                    ec="black",fc="#F5F5F5",alpha=0.92,linewidth=0.32))
+        ax.text(x+pad, y+pad, sign[:3], ha='left', va='top', fontsize=3.2)
 
-        x = gx * spacing + 0.22
-        y = (3 - gy) * spacing + 0.22  # note: y increases downward after invert
-
-        box = FancyBboxPatch(
-            (x, y), box_w, box_h, boxstyle="round,pad=0.004",
-            ec="black", fc="#F5F5F5", alpha=0.92, linewidth=0.32
-        )
-        ax.add_patch(box)
-
-        # LEFT-TOP sign label inside the box (small)
-        ax.text(x + pad, y + pad, sign[:3],
-                ha='left', va='top', fontsize=3.4)
-
-        # Planet labels (stacked center, tiny)
         if planets_list:
-            line_height = 0.045
-            start_y = y + pad + 0.035  # start a bit below the sign label
+            avail = box_h - (pad + 0.04)
+            n = len(planets_list)
+            line_h = min(0.045, max(0.028, avail / max(n,1)))
+            start_y = y + pad + 0.035
             for i, planet in enumerate(planets_list):
-                py = start_y + i * line_height
-                ax.text(x + box_w / 2, py, planet,
-                        ha='center', va='top', fontsize=3.8, fontweight='bold')
+                py = start_y + i*line_h
+                ax.text(x + box_w/2, py, planet, ha='center', va='top', fontsize=3.6)  # plain text
 
-    ax.set_xlim(0, 3); ax.set_ylim(0, 3)
-    ax.set_aspect('equal')
-    ax.invert_yaxis()  # keep top row visually at top
-    ax.set_title(title, fontsize=5.2, weight='bold')  # smaller title
+    ax.set_xlim(0,3); ax.set_ylim(0,3); ax.set_aspect('equal'); ax.invert_yaxis()
+    ax.set_title(title, fontsize=4.6, fontweight='normal')
     ax.axis('off')
 
-# --- STREAMLIT UI ---
+# -------- STREAMLIT UI --------
 st.set_page_config(page_title="Sivapathy Horoscope", layout="wide")
 
-# Enhanced CSS
 st.markdown("""
 <style>
-    .stApp {
-        background-color: white;
-        color: #125336;
-    }
+    .stApp { background-color: white; color: #125336; }
     .stTextInput > div > div > input,
     .stSelectbox > div > div > select,
     .stNumberInput > div > div > input {
-        background-color: white;
-        color: #125336;
-        border: 1px solid #125336;
+        background-color: white; color: #125336; border: 1px solid #125336;
     }
     .stButton > button {
-        background-color: #125336;
-        color: white;
-        border: none;
-        padding: 0.5rem 2rem;
-        font-size: 1.1rem;
-        font-weight: 600;
+        background-color: #125336; color: white; border: none; padding: 0.5rem 2rem;
+        font-size: 1.1rem; font-weight: 600;
     }
-    .stButton > button:hover {
-        background-color: #0a3d22;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    h1, h2, h3 {
-        color: #125336 !important;
-    }
-    .summary-box {
-        background-color: #f0f7f4;
-        padding: 1.5rem;
-        border-radius: 10px;
-        border: 2px solid #125336;
-        margin: 1.5rem 0;
-    }
-    .summary-box h3 {
-        margin-top: 0;
-        color: #125336 !important;
-    }
-    .summary-item {
-        font-size: 1.1rem;
-        margin: 0.5rem 0;
-        color: #125336;
-    }
-    div[data-testid="stVerticalBlock"] > div:first-child {
-        padding-top: 0 !important;
-    }
+    .stButton > button:hover { background-color: #0a3d22; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    h1, h2, h3 { color: #125336 !important; }
+    .summary-box { background-color: #f0f7f4; padding: 1.2rem; border-radius: 10px; border: 2px solid #125336; margin: 1rem 0; }
+    .summary-item { font-size: 1.05rem; margin: 0.35rem 0; color: #125336; }
+    div[data-testid="stVerticalBlock"] > div:first-child { padding-top: 0 !important; }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("Sivapathy Astrology Data Generator")
 
-# Initialize session state
-if 'chart_data' not in st.session_state:
-    st.session_state.chart_data = None
-if 'location_data' not in st.session_state:
-    st.session_state.location_data = None
-if 'search_results' not in st.session_state:
-    st.session_state.search_results = []
+# Session
+if 'chart_data' not in st.session_state: st.session_state.chart_data = None
+if 'location_data' not in st.session_state: st.session_state.location_data = None
+if 'search_results' not in st.session_state: st.session_state.search_results = []
 
-# Initialize geolocator
 @st.cache_resource
 def get_geolocator():
     geolocator = Nominatim(user_agent="vedic_astro_app")
@@ -517,136 +414,78 @@ def get_geolocator():
 
 geocode = get_geolocator()
 
-# Input Section
+# Inputs
 st.subheader("Birth Details")
-
-# Name input
 name = st.text_input("Name", placeholder="Enter full name")
+c1, c2, c3 = st.columns(3)
+with c1:
+    birth_date = st.date_input("Birth Date", value=datetime.now().date(),
+                               min_value=datetime(1900,1,1).date(), max_value=datetime.now().date())
+with c2:
+    birth_time = st.text_input("Birth Time (HH:MM in 24-hour format)",
+                               placeholder="14:30", help="Example: 14:30 for 2:30 PM")
+with c3:
+    tz_offset = st.number_input("Timezone offset (hrs)", value=5.5, step=0.5,
+                                help="Offset from UTC (e.g., IST = 5.5)")
 
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    birth_date = st.date_input(
-        "Birth Date",
-        value=datetime.now().date(),
-        min_value=datetime(1900, 1, 1).date(),
-        max_value=datetime.now().date()
-    )
-
-with col2:
-    birth_time = st.text_input(
-        "Birth Time (HH:MM in 24-hour format)",
-        placeholder="14:30",
-        help="Example: 14:30 for 2:30 PM"
-    )
-
-with col3:
-    tz_offset = st.number_input(
-        "Timezone offset (hrs)",
-        value=5.5,
-        step=0.5,
-        help="Offset from UTC (e.g., IST = 5.5)"
-    )
-
-# Custom coordinates checkbox
 use_custom_coords = st.checkbox("Custom latitude and longitude?")
-
 if use_custom_coords:
-    col_lat, col_lon = st.columns(2)
-    with col_lat:
-        lat = st.number_input("Latitude", value=13.08, format="%.4f")
-    with col_lon:
-        lon = st.number_input("Longitude", value=80.27, format="%.4f")
+    clat, clon = st.columns(2)
+    with clat: lat = st.number_input("Latitude", value=13.08, format="%.4f")
+    with clon: lon = st.number_input("Longitude", value=80.27, format="%.4f")
     location_data = {'lat': lat, 'lon': lon}
 else:
-    # City search with real-time autocomplete
-    city_query = st.text_input(
-        "Search City",
-        placeholder="Start typing city name...",
-        key="city_input"
-    )
-    
-    # Automatically search as user types
+    city_query = st.text_input("Search City", placeholder="Start typing city name...", key="city_input")
     if city_query and len(city_query) >= 2:
         try:
             locations = geocode(city_query, exactly_one=False, limit=5)
             if locations:
-                st.session_state.search_results = [
-                    {
-                        'display': f"{loc.address}",
-                        'lat': loc.latitude,
-                        'lon': loc.longitude,
-                        'address': loc.address
-                    }
-                    for loc in locations
-                ]
+                st.session_state.search_results = [{'display': f"{loc.address}", 'lat': loc.latitude, 'lon': loc.longitude, 'address': loc.address} for loc in locations]
             else:
                 city_key = city_query.title()
                 if city_key in cities_fallback:
-                    st.session_state.search_results = [{
-                        'display': f"{city_key} (Fallback)",
-                        'lat': cities_fallback[city_key]['lat'],
-                        'lon': cities_fallback[city_key]['lon'],
-                        'address': city_key
-                    }]
+                    st.session_state.search_results = [{'display': f"{city_key} (Fallback)",
+                                                        'lat': cities_fallback[city_key]['lat'],
+                                                        'lon': cities_fallback[city_key]['lon'],
+                                                        'address': city_key}]
                 else:
                     st.session_state.search_results = []
         except:
             city_key = city_query.title()
             if city_key in cities_fallback:
-                st.session_state.search_results = [{
-                    'display': f"{city_key} (Fallback)",
-                    'lat': cities_fallback[city_key]['lat'],
-                    'lon': cities_fallback[city_key]['lon'],
-                    'address': city_key
-                }]
+                st.session_state.search_results = [{'display': f"{city_key} (Fallback)",
+                                                    'lat': cities_fallback[city_key]['lat'],
+                                                    'lon': cities_fallback[city_key]['lon'],
+                                                    'address': city_key}]
             else:
                 st.session_state.search_results = []
     elif len(city_query) < 2:
         st.session_state.search_results = []
-    
-    # Show search results
+
     if st.session_state.search_results:
-        result_options = [r['display'] for r in st.session_state.search_results]
-        selected = st.selectbox(
-            "Select location",
-            options=result_options,
-            key="location_selector"
-        )
-        selected_idx = result_options.index(selected)
-        location_data = st.session_state.search_results[selected_idx]
-        lat = location_data['lat']
-        lon = location_data['lon']
+        options = [r['display'] for r in st.session_state.search_results]
+        selected = st.selectbox("Select location", options=options, key="location_selector")
+        idx = options.index(selected)
+        location_data = st.session_state.search_results[idx]
+        lat = location_data['lat']; lon = location_data['lon']
         st.success(f"Selected: {location_data['address']} (Lat: {lat:.2f}, Lon: {lon:.2f})")
     else:
         lat, lon = 13.08, 80.27
         location_data = {'lat': lat, 'lon': lon}
         st.info("Using default location: Chennai, India")
 
-# Dasa depth selector
 max_depth_options = {
-    1: 'Dasa only',
-    2: 'Dasa + Bhukti',
-    3: 'Dasa + Bhukti + Anthara',
-    4: 'Dasa + Bhukti + Anthara + Sukshma',
-    5: 'Dasa + Bhukti + Anthara + Sukshma + Prana',
-    6: 'Dasa + Bhukti + Anthara + Sukshma + Prana + Sub-Prana'
+    1:'Dasa only', 2:'Dasa + Bhukti', 3:'Dasa + Bhukti + Anthara',
+    4:'Dasa + Bhukti + Anthara + Sukshma', 5:'Dasa + Bhukti + Anthara + Sukshma + Prana',
+    6:'Dasa + Bhukti + Anthara + Sukshma + Prana + Sub-Prana'
 }
-selected_depth_str = st.selectbox(
-    "Period Depth",
-    options=list(max_depth_options.values()),
-    index=2
-)
+selected_depth_str = st.selectbox("Period Depth", options=list(max_depth_options.values()), index=2)
 max_depth = list(max_depth_options.keys())[list(max_depth_options.values()).index(selected_depth_str)]
 
-# Chart style selector
-chart_style = st.selectbox("Chart Style", ["Table", "North Indian", "South Indian"], index=2)
-
-# Optional: SVG toggle (for ultra-crisp lines)
+chart_style = st.selectbox("Chart Style", ["Table","North Indian","South Indian"], index=2)
 render_svg = st.checkbox("Render charts as SVG (crispest)", value=False,
                          help="Vector rendering keeps lines ultra-thin at any zoom")
 
-# Generate button
 if st.button("Generate Chart", use_container_width=True):
     if not name:
         st.error("Please enter a name.")
@@ -655,9 +494,7 @@ if st.button("Generate Chart", use_container_width=True):
     else:
         try:
             with st.spinner("Calculating chart..."):
-                st.session_state.chart_data = compute_chart(
-                    name, birth_date, birth_time, lat, lon, tz_offset, max_depth
-                )
+                st.session_state.chart_data = compute_chart(name, birth_date, birth_time, lat, lon, tz_offset, max_depth)
             st.success("Chart generated successfully!")
             st.rerun()
         except ValueError as e:
@@ -665,24 +502,20 @@ if st.button("Generate Chart", use_container_width=True):
         except Exception as e:
             st.error(f"Error generating chart: {e}")
 
-# Helper renderers (no stretching)
+# -------- RENDER HELPERS (do NOT wrap in st.write) --------
 def show_png(fig):
-    fig.tight_layout(pad=0.15)
+    fig.tight_layout(pad=0.12)
     st.pyplot(fig, use_container_width=False, dpi=300)
 
-def show_svg(fig, width_px=260):
+def show_svg(fig, width_px=240):
     buf = io.BytesIO()
-    fig.savefig(buf, format="svg", bbox_inches="tight")
-    svg = buf.getvalue()
-    st.image(svg, width=width_px)
+    fig.savefig(buf, format="svg", bbox_inches="tight", pad_inches=0.02)
+    st.image(buf.getvalue(), width=width_px)
 
-# Display results
+# -------- OUTPUT --------
 if st.session_state.chart_data:
     chart_data = st.session_state.chart_data
-    
     st.markdown("---")
-    
-    # Summary Box
     st.markdown(f"""
     <div class="summary-box">
         <h3>Chart Summary</h3>
@@ -692,37 +525,27 @@ if st.session_state.chart_data:
         <div class="summary-item"><strong>Nakshatra:</strong> {chart_data['moon_nakshatra']} (Pada {chart_data['moon_pada']})</div>
     </div>
     """, unsafe_allow_html=True)
-    
-    # Planetary Details
+
     st.subheader("Planetary Positions")
     st.dataframe(chart_data['df_planets'], hide_index=True, use_container_width=True)
-    
-    # --- Rasi & Navamsa side-by-side ---
+
+    # Side-by-side charts
     st.subheader("Rasi (D1) & Navamsa (D9)")
     if chart_style == "Table":
-        col_a, col_b = st.columns(2, gap="small")
-        with col_a:
+        ca, cb = st.columns(2, gap="small")
+        with ca:
             st.markdown("**Rasi (D1)**")
             st.dataframe(chart_data['df_rasi'], hide_index=True, use_container_width=True)
-        with col_b:
+        with cb:
             st.markdown("**Navamsa (D9)**")
             st.dataframe(chart_data['df_nav'], hide_index=True, use_container_width=True)
     else:
-        # Prepare house->sign maps as needed
-        house_to_sign_rasi = {}
-        for h in range(1, 13):
-            sign_start = (chart_data['lagna_sid'] + (h - 1) * 30) % 360
-            house_to_sign_rasi[h] = get_sign(sign_start)
-
-        house_to_sign_nav = {}
-        for h in range(1, 13):
-            sign_start = (chart_data['nav_lagna'] + (h - 1) * 30) % 360
-            house_to_sign_nav[h] = get_sign(sign_start)
+        # Build house->sign maps
+        house_to_sign_rasi = {h: get_sign((chart_data['lagna_sid'] + (h-1)*30) % 360) for h in range(1,13)}
+        house_to_sign_nav  = {h: get_sign((chart_data['nav_lagna'] + (h-1)*30) % 360) for h in range(1,13)}
 
         col1, col2 = st.columns(2, gap="small")
-
-        # Smaller logical size to reduce visual size even more
-        size = (1.8, 1.8)
+        size = (1.8, 1.8)  # smaller logical size
 
         with col1:
             if chart_style == "North Indian":
@@ -742,136 +565,90 @@ if st.session_state.chart_data:
                 plot_south_indian_style(ax, chart_data['house_to_planets_nav'], chart_data['nav_lagna_sign'], 'Navamsa Chart (South Indian)')
             show_svg(fig) if render_svg else show_png(fig)
 
-    # House Status
     st.subheader("House Analysis")
     st.dataframe(chart_data['df_house_status'], hide_index=True, use_container_width=True)
-    
-    # Vimshottari Dasa
+
     st.subheader(f"Vimshottari Dasa ({chart_data['selected_depth']})")
-    
-    dasa_periods_filtered = chart_data['dasa_periods_filtered']
-    utc_dt = chart_data['utc_dt']
-    max_depth = chart_data['max_depth']
-    
-    # Main Dasa table
-    dasa_data = []
-    for lord, start, end, _ in dasa_periods_filtered:
+    dasa_rows = []
+    for lord, start, end, _subs in chart_data['dasa_periods_filtered']:
         dur = end - start
-        dasa_data.append({
-            'Planet': lord,
-            'Start': start.strftime('%Y-%m-%d'),
-            'End': end.strftime('%Y-%m-%d'),
-            'Duration': duration_str(dur, 'dasa')
-        })
-    df_dasa = pd.DataFrame(dasa_data)
-    st.dataframe(df_dasa, hide_index=True, use_container_width=True)
-    
-    # Nested periods with expanders
+        dasa_rows.append({'Planet': lord, 'Start': start.strftime('%Y-%m-%d'),
+                          'End': end.strftime('%Y-%m-%d'), 'Duration': duration_str(dur, 'dasa')})
+    st.dataframe(pd.DataFrame(dasa_rows), hide_index=True, use_container_width=True)
+
+    # Nested expanders (unchanged logic)
+    max_depth = chart_data['max_depth']
     if max_depth >= 2:
         with st.expander("View Bhuktis (Sub-periods)", expanded=False):
-            if dasa_periods_filtered:
-                dasa_options = [f"{p[0]} ({p[1].strftime('%Y-%m-%d')} - {p[2].strftime('%Y-%m-%d')})" 
-                               for p in dasa_periods_filtered]
+            dp = chart_data['dasa_periods_filtered']
+            if dp:
+                dasa_options = [f"{p[0]} ({p[1].strftime('%Y-%m-%d')} - {p[2].strftime('%Y-%m-%d')})" for p in dp]
                 selected_dasa = st.selectbox("Select Dasa:", dasa_options, key="dasa_select")
                 sel_idx = dasa_options.index(selected_dasa)
-                bhuktis = dasa_periods_filtered[sel_idx][3]
-                
-                bhukti_data = []
+                bhuktis = dp[sel_idx][3]
+                bh_rows = []
                 for b_lord, b_start, b_end, _ in bhuktis:
-                    dur = b_end - b_start
-                    bhukti_data.append({
-                        'Planet': b_lord,
-                        'Start': b_start.strftime('%Y-%m-%d'),
-                        'End': b_end.strftime('%Y-%m-%d'),
-                        'Duration': duration_str(dur, 'bhukti')
-                    })
-                df_bhukti = pd.DataFrame(bhukti_data)
-                st.dataframe(df_bhukti, hide_index=True, use_container_width=True)
-                
+                    bh_rows.append({'Planet': b_lord, 'Start': b_start.strftime('%Y-%m-%d'),
+                                    'End': b_end.strftime('%Y-%m-%d'),
+                                    'Duration': duration_str(b_end-b_start, 'bhukti')})
+                st.dataframe(pd.DataFrame(bh_rows), hide_index=True, use_container_width=True)
+
                 if max_depth >= 3:
                     with st.expander("View Antharas", expanded=False):
                         if bhuktis:
-                            bhukti_options = [f"{p[0]} ({p[1].strftime('%Y-%m-%d')} - {p[2].strftime('%Y-%m-%d')})" 
-                                            for p in bhuktis]
-                            selected_bhukti = st.selectbox("Select Bhukti:", bhukti_options, key="bhukti_select")
-                            sel_b_idx = bhukti_options.index(selected_bhukti)
-                            antharas = bhuktis[sel_b_idx][3]
-                            
-                            anthara_data = []
+                            bh_opts = [f"{p[0]} ({p[1].strftime('%Y-%m-%d')} - {p[2].strftime('%Y-%m-%d')})" for p in bhuktis]
+                            selected_bh = st.selectbox("Select Bhukti:", bh_opts, key="bhukti_select")
+                            sidx = bh_opts.index(selected_bh)
+                            antharas = bhuktis[sidx][3]
+                            an_rows = []
                             for a_lord, a_start, a_end, _ in antharas:
-                                dur = a_end - a_start
-                                anthara_data.append({
-                                    'Planet': a_lord,
-                                    'Start': a_start.strftime('%Y-%m-%d %H:%M'),
-                                    'End': a_end.strftime('%Y-%m-%d %H:%M'),
-                                    'Duration': duration_str(dur, 'anthara')
-                                })
-                            df_anthara = pd.DataFrame(anthara_data)
-                            st.dataframe(df_anthara, hide_index=True, use_container_width=True)
-                            
+                                an_rows.append({'Planet': a_lord, 'Start': a_start.strftime('%Y-%m-%d %H:%M'),
+                                                'End': a_end.strftime('%Y-%m-%d %H:%M'),
+                                                'Duration': duration_str(a_end-a_start, 'anthara')})
+                            st.dataframe(pd.DataFrame(an_rows), hide_index=True, use_container_width=True)
+
                             if max_depth >= 4:
                                 with st.expander("View Sukshmas", expanded=False):
                                     if antharas:
-                                        anthara_options = [f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" 
-                                                         for p in antharas]
-                                        selected_anthara = st.selectbox("Select Anthara:", anthara_options, key="anthara_select")
-                                        sel_a_idx = anthara_options.index(selected_anthara)
-                                        sukshmas = antharas[sel_a_idx][3]
-                                        
-                                        sukshma_data = []
+                                        an_opts = [f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" for p in antharas]
+                                        selected_an = st.selectbox("Select Anthara:", an_opts, key="anthara_select")
+                                        aidx = an_opts.index(selected_an)
+                                        sukshmas = antharas[aidx][3]
+                                        sk_rows = []
                                         for s_lord, s_start, s_end, _ in sukshmas:
-                                            dur = s_end - s_start
-                                            sukshma_data.append({
-                                                'Planet': s_lord,
-                                                'Start': s_start.strftime('%Y-%m-%d %H:%M'),
-                                                'End': s_end.strftime('%Y-%m-%d %H:%M'),
-                                                'Duration': duration_str(dur, 'sukshma')
-                                            })
-                                        df_sukshma = pd.DataFrame(sukshma_data)
-                                        st.dataframe(df_sukshma, hide_index=True, use_container_width=True)
-                                        
+                                            sk_rows.append({'Planet': s_lord, 'Start': s_start.strftime('%Y-%m-%d %H:%M'),
+                                                            'End': s_end.strftime('%Y-%m-%d %H:%M'),
+                                                            'Duration': duration_str(s_end-s_start, 'sukshma')})
+                                        st.dataframe(pd.DataFrame(sk_rows), hide_index=True, use_container_width=True)
+
                                         if max_depth >= 5:
                                             with st.expander("View Pranas", expanded=False):
                                                 if sukshmas:
-                                                    sukshma_options = [f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" 
-                                                                     for p in sukshmas]
-                                                    selected_sukshma = st.selectbox("Select Sukshma:", sukshma_options, key="sukshma_select")
-                                                    sel_s_idx = sukshma_options.index(selected_sukshma)
-                                                    pranas = sukshmas[sel_s_idx][3]
-                                                    
-                                                    prana_data = []
+                                                    sk_opts = [f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" for p in sukshmas]
+                                                    selected_sk = st.selectbox("Select Sukshma:", sk_opts, key="sukshma_select")
+                                                    sidx2 = sk_opts.index(selected_sk)
+                                                    pranas = sukshmas[sidx2][3]
+                                                    pr_rows = []
                                                     for pr_lord, pr_start, pr_end, _ in pranas:
-                                                        dur = pr_end - pr_start
-                                                        prana_data.append({
-                                                            'Planet': pr_lord,
-                                                            'Start': pr_start.strftime('%Y-%m-%d %H:%M'),
-                                                            'End': pr_end.strftime('%Y-%m-%d %H:%M'),
-                                                            'Duration': duration_str(dur, 'prana')
-                                                        })
-                                                    df_prana = pd.DataFrame(prana_data)
-                                                    st.dataframe(df_prana, hide_index=True, use_container_width=True)
-                                                    
+                                                        pr_rows.append({'Planet': pr_lord, 'Start': pr_start.strftime('%Y-%m-%d %H:%M'),
+                                                                        'End': pr_end.strftime('%Y-%m-%d %H:%M'),
+                                                                        'Duration': duration_str(pr_end-pr_start, 'prana')})
+                                                    st.dataframe(pd.DataFrame(pr_rows), hide_index=True, use_container_width=True)
+
                                                     if max_depth >= 6:
                                                         with st.expander("View Sub-Pranas", expanded=False):
                                                             if pranas:
-                                                                prana_options = [f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" 
-                                                                               for p in pranas]
-                                                                selected_prana = st.selectbox("Select Prana:", prana_options, key="prana_select")
-                                                                sel_pr_idx = prana_options.index(selected_prana)
-                                                                sub_pranas = pranas[sel_pr_idx][3]
-                                                                
-                                                                sub_prana_data = []
+                                                                pr_opts = [f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" for p in pranas]
+                                                                selected_pr = st.selectbox("Select Prana:", pr_opts, key="prana_select")
+                                                                pidx = pr_opts.index(selected_pr)
+                                                                sub_pranas = pranas[pidx][3]
+                                                                sp_rows = []
                                                                 for sp_lord, sp_start, sp_end, _ in sub_pranas:
-                                                                    dur = sp_end - sp_start
-                                                                    sub_prana_data.append({
-                                                                        'Planet': sp_lord,
-                                                                        'Start': sp_start.strftime('%Y-%m-%d %H:%M'),
-                                                                        'End': sp_end.strftime('%Y-%m-%d %H:%M'),
-                                                                        'Duration': duration_str(dur, 'sub_prana')
-                                                                    })
-                                                                df_sub_prana = pd.DataFrame(sub_prana_data)
-                                                                st.dataframe(df_sub_prana, hide_index=True, use_container_width=True)
-    
+                                                                    sp_rows.append({'Planet': sp_lord, 'Start': sp_start.strftime('%Y-%m-%d %H:%M'),
+                                                                                    'End': sp_end.strftime('%Y-%m-%d %H:%M'),
+                                                                                    'Duration': duration_str(sp_end-sp_start, 'sub_prana')})
+                                                                st.dataframe(pd.DataFrame(sp_rows), hide_index=True, use_container_width=True)
+
     st.info("Note: Periods filtered from birth. Durations approximate.")
 else:
     st.info("Enter details above and click 'Generate Chart' to begin")
