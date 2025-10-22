@@ -120,9 +120,12 @@ def duration_str(delta, level='dasa'):
     m = int(rem/30.4375); d = int(rem % 30.4375)
     return "Less than 1 day" if y+m+d==0 else f"{y}y {m}m {d}d"
 
-def format_period_dates(start, end, level):
-    """Format start/end with time for short levels"""
-    if level in ['prana', 'sub_prana']:
+def format_period_dates(start, end, level, delta=None):
+    """Format start/end with time for short levels or short durations"""
+    if delta is None:
+        delta = end - start
+    days = delta.total_seconds()/86400
+    if days < 1 or level in ['prana', 'sub_prana']:
         return start.strftime('%Y-%m-%d %H:%M'), end.strftime('%Y-%m-%d %H:%M')
     else:
         return start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d')
