@@ -80,6 +80,7 @@ def compute_sidereal_positions(utc_dt):
     lon_sid = {p: get_sidereal_lon(lon_trop[p], ayan) for p in lon_trop}
     return lon_sid
 
+# ---- Optimized Dasa helpers ----
 def generate_vimshottari_dasa(moon_lon):
     nak = int(moon_lon * 27 / 360)
     lord_idx = nak % 9
@@ -97,6 +98,7 @@ def generate_periods(start_date, lord_idx, total_years, level='dasa', max_depth=
         lord = lords_full[i]; y_full = years[i]
         y = min((y_full/120)*total_years, remaining)
         end = current + timedelta(days=y*365.25)
+        # Cap subs to avoid deep recursion—only if needed for tree depth
         subs = generate_periods(current, i, y, next_level[depth], max_depth) if (depth < max_depth-1 and next_level[depth]) else []
         periods.append((lord, current, end, subs))
         remaining -= y; current = end; i = (i+1) % 9
@@ -118,11 +120,63 @@ def duration_str(delta, level='dasa'):
     m = int(rem/30.4375); d = int(rem % 30.4375)
     return "Less than 1 day" if y+m+d==0 else f"{y}y {m}m {d}d"
 
-def next_level_dict():
-    return {'dasa': 'bhukti', 'bhukti': 'anthara', 'anthara': 'sukshma', 'sukshma': 'prana', 'prana': 'sub_prana', 'sub_prana': None}
+# ---- NEW: Iterative current path finder (fast, no tree build) ----
+@st.cache_data
+def get_current_dasa_path(_now, _birth_utc, _moon_lon, max_level=6):
+    """
+    Computes ONLY the active path to max_level (e.g., Sub-Prana) iteratively.
+    Loops 9x per level → <0.01s even for depth 6.
+    Returns list of (level, lord, start, end, duration_str).
+    """
+    idx, bal = generate_vimshottari_dasa(_moon_lon)
+    full_first = years[idx]
+    passed = full_first - bal
+    dasa_start = _birth_utc - timedelta(days=passed*365.25)
+    time_from_dasa_start = (_now - dasa_start).total_seconds() / 86400
+    path = []
+    current_total_years = 120.0
+    current_start_date = dasa_start
+    current_level = 'dasa'
+    current_start_idx = idx
+    rel_days_from_start = time_from_dasa_start  # Relative to current level start
 
+    level_count = 0
+    while current_level and level_count < max_level:
+        cum_days = 0.0
+        found_lord = None
+        found_start = None
+        found_end = None
+        found_sub_idx = None
+        for k in range(9):
+            sub_idx = (current_start_idx + k) % 9
+            sub_full_y = years[sub_idx]
+            sub_y = (sub_full_y / 120) * current_total_years
+            sub_days = sub_y * 365.25
+            if cum_days <= rel_days_from_start < cum_days + sub_days:
+                found_lord = lords_full[sub_idx]
+                found_start = current_start_date + timedelta(days=cum_days)
+                found_end = found_start + timedelta(days=sub_days)
+                found_sub_idx = sub_idx
+                break
+            cum_days += sub_days
+
+        if found_lord:
+            path.append((current_level, found_lord, found_start, found_end, duration_str(found_end - found_start, current_level)))
+            # Prep next level
+            current_start_date = found_start
+            current_total_years = (found_end - found_start).total_seconds() / (86400 * 365.25)
+            current_start_idx = found_sub_idx
+            current_level = {'dasa': 'bhukti', 'bhukti': 'anthara', 'anthara': 'sukshma', 'sukshma': 'prana', 'prana': 'sub_prana', 'sub_prana': None}.get(current_level)
+            rel_days_from_start -= cum_days
+            level_count += 1
+        else:
+            break
+
+    return path
+
+# ---- Existing render helpers (unchanged, but now called with max_depth=3) ----
 def find_current_path(periods, now, level='dasa', path=[]):
-    nl = next_level_dict().get(level)
+    nl = {'dasa': 'bhukti', 'bhukti': 'anthara', 'anthara': 'sukshma', 'sukshma': 'prana', 'prana': 'sub_prana', 'sub_prana': None}.get(level)
     for lord, start, end, subs in periods:
         if start <= now < end:
             new_path = path + [(level, lord)]
@@ -133,8 +187,8 @@ def find_current_path(periods, now, level='dasa', path=[]):
                 return new_path
     return []
 
-def render_period_tree(periods, level='dasa', remaining_path=[], now=None, max_depth=1):
-    nl = next_level_dict().get(level)
+def render_period_tree(periods, level='dasa', remaining_path=[], now=None, max_depth=3):
+    nl = {'dasa': 'bhukti', 'bhukti': 'anthara', 'anthara': 'sukshma', 'sukshma': 'prana', 'prana': 'sub_prana', 'sub_prana': None}.get(level)
     for lord, start, end, subs in periods:
         expanded = False
         if remaining_path and remaining_path[0][0] == level and remaining_path[0][1] == lord:
@@ -153,7 +207,7 @@ def render_period_tree(periods, level='dasa', remaining_path=[], now=None, max_d
             if subs and nl:
                 render_period_tree(subs, nl, remaining_path[1:] if remaining_path and remaining_path[0][1] == lord else [], now, max_depth)
 
-def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
+def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, tree_max_depth):  # Updated to use tree_max_depth
     # parse time
     try:
         hour, minute = map(int, time_str.split(':'))
@@ -219,17 +273,13 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                              ', '.join(asp) if asp else 'None', lord, f"House {lord_house}" if lord_house != 'N/A' else 'N/A'])
     df_house_status = pd.DataFrame(house_status, columns=['House','Planets','Aspects from','Lord','Lord in'])
 
-    # dasa tree
+    # dasa tree (capped at tree_max_depth for fast load)
     moon_lon = rounded_lon['moon']
     idx, bal = generate_vimshottari_dasa(moon_lon)
     full_first = years[idx]; passed = full_first - bal
     dasa_start = utc_dt - timedelta(days=passed*365.25)
-    dasa = generate_periods(dasa_start, idx, 120, 'dasa', max_depth)
+    dasa = generate_periods(dasa_start, idx, 120, 'dasa', tree_max_depth)
     dasa_filtered = filter_from_birth(dasa, utc_dt)
-
-    depth_map = {1:'Dasa only',2:'Dasa + Bhukti',3:'Dasa + Bhukti + Anthara',
-                 4:'Dasa + Bhukti + Anthara + Sukshma',5:'Dasa + Bhukti + Anthara + Sukshma + Prana',
-                 6:'Dasa + Bhukti + Anthara + Sukshma + Prana + Sub-Prana'}
 
     return {
         'name': name, 'df_planets': df_planets, 'df_rasi': df_rasi, 'df_nav': df_nav,
@@ -237,7 +287,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         'lagna_sid': rounded_lagna, 'nav_lagna': nav_lagna, 'lagna_sign': lagna_sign,
         'nav_lagna_sign': get_sign(nav_lagna), 'moon_rasi': get_sign(moon_lon),
         'moon_nakshatra': get_nakshatra_details(moon_lon)[0], 'moon_pada': get_nakshatra_details(moon_lon)[1],
-        'selected_depth': depth_map[max_depth], 'utc_dt': utc_dt, 'max_depth': max_depth,
+        'tree_max_depth': tree_max_depth, 'utc_dt': utc_dt,
         'house_to_planets_rasi': house_planets_rasi, 'house_to_planets_nav': house_planets_nav,
         'natal_moon_lon': moon_lon, 'tz_offset': tz_offset
     }
@@ -354,13 +404,15 @@ else:
             lat, lon = 13.08, 80.27
         st.info("Using default location: Chennai, India")
 
-max_depth_options = {
-    1:'Dasa only',2:'Dasa + Bhukti',3:'Dasa + Bhukti + Anthara',
-    4:'Dasa + Bhukti + Anthara + Sukshma',5:'Dasa + Bhukti + Anthara + Sukshma + Prana',
-    6:'Dasa + Bhukti + Anthara + Sukshma + Prana + Sub-Prana'
+# Updated UI for depths
+tree_depth_options = {
+    1: 'Dasa only', 2: 'Dasa + Bhukti', 3: 'Dasa + Bhukti + Anthara'
 }
-selected_depth_str = st.selectbox("Period Depth", list(max_depth_options.values()), index=2)
-max_depth = [k for k,v in max_depth_options.items() if v == selected_depth_str][0]
+selected_tree_depth_str = st.selectbox("Tree Depth", list(tree_depth_options.values()), index=2)
+tree_max_depth = [k for k,v in tree_depth_options.items() if v == selected_tree_depth_str][0]
+
+deep_path_depth = st.selectbox("Show Current Path Depth", ['Up to Anthara', 'Up to Sukshma', 'Up to Prana', 'Up to Sub-Prana'], index=2)
+deep_max_level = {'Up to Anthara': 3, 'Up to Sukshma': 4, 'Up to Prana': 5, 'Up to Sub-Prana': 6}[deep_path_depth]
 
 if st.button("Generate Chart", use_container_width=True):
     if not name:
@@ -370,7 +422,7 @@ if st.button("Generate Chart", use_container_width=True):
     else:
         try:
             with st.spinner("Calculating chart..."):
-                st.session_state.chart_data = compute_chart(name, birth_date, birth_time, lat, lon, tz_offset, max_depth)
+                st.session_state.chart_data = compute_chart(name, birth_date, birth_time, lat, lon, tz_offset, tree_max_depth)
             st.success("Chart generated successfully!")
             st.rerun()
         except ValueError as e:
@@ -465,10 +517,22 @@ if st.session_state.chart_data:
     st.dataframe(df_transit_house, hide_index=True, use_container_width=True)
     st.caption(f"Based on transits as of {local_now.strftime('%Y-%m-%d %H:%M')} local time")
 
-    # Vimshottari Dasa Tree
-    current_path = find_current_path(cd['dasa_periods_filtered'], local_now, 'dasa', [])
-    st.subheader(f"Vimshottari Dasa ({cd['selected_depth']}) — Current as of {local_now.strftime('%Y-%m-%d %H:%M')} local time")
-    render_period_tree(cd['dasa_periods_filtered'], 'dasa', current_path, local_now, cd['max_depth'])
+    # Vimshottari Tree (now fast)
+    current_tree_path = find_current_path(cd['dasa_periods_filtered'], local_now, 'dasa', [])
+    st.subheader(f"Vimshottari Dasa Tree (up to {selected_tree_depth_str}) — Current as of {local_now.strftime('%Y-%m-%d %H:%M')} local time")
+    render_period_tree(cd['dasa_periods_filtered'], 'dasa', current_tree_path, local_now, cd['tree_max_depth'])
+    st.info("Tree capped at selected depth for speed. Expand to view sub-periods. See below for deeper current path.")
+
+    # NEW: Current Deep Path Section
+    st.subheader(f"Current Active Path ({deep_path_depth})")
+    current_deep_path = get_current_dasa_path(local_now, cd['utc_dt'], cd['natal_moon_lon'], deep_max_level)
+    if current_deep_path:
+        deep_df = pd.DataFrame(current_deep_path, columns=['Level', 'Lord', 'Start', 'End', 'Duration'])
+        st.dataframe(deep_df, hide_index=True, use_container_width=True)
+        st.caption("Exact active chain to selected depth. Durations approximate.")
+    else:
+        st.warning("No active periods found (future birth date?)")
+
     st.info("Note: Periods are filtered from birth time; durations are approximate. Click expanders to view sub-periods.")
 else:
     st.info("Enter details above and click 'Generate Chart' to begin. Note: For accurate planetary positions, install jplephem: pip install jplephem")
