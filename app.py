@@ -125,7 +125,7 @@ def format_period_dates(start, end, level, delta=None):
     if delta is None:
         delta = end - start
     days = delta.total_seconds()/86400
-    if days < 1 or level in ['prana', 'sub_prana']:
+    if level in ['sukshma', 'prana', 'sub_prana'] or days < 1:
         return start.strftime('%Y-%m-%d %H:%M'), end.strftime('%Y-%m-%d %H:%M')
     else:
         return start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d')
