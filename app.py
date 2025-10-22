@@ -66,20 +66,6 @@ def get_nakshatra_details(lon):
     sub  = (star + int((pos/dnak)*9)) % 9
     return nak_names[idx], pada, lords_short[star], lords_short[sub]
 
-def compute_sidereal_positions(utc_dt):
-    t = Time(utc_dt); jd = t.jd; ayan = get_lahiri_ayanamsa(utc_dt.year)
-
-    with solar_system_ephemeris.set('builtin'):
-        lon_trop = {}
-        for nm in ['sun','moon','mercury','venus','mars','jupiter','saturn']:
-            ecl = get_body(nm, t).transform_to(GeocentricTrueEcliptic()); lon_trop[nm] = ecl.lon.deg
-    d = jd - 2451545.0; T = d/36525.0
-    omega = (125.04452 - 1934.136261*T + 0.0020708*T**2 + T**3/450000) % 360
-    lon_trop['rahu'] = omega; lon_trop['ketu'] = (omega + 180) % 360
-
-    lon_sid = {p: get_sidereal_lon(lon_trop[p], ayan) for p in lon_trop}
-    return lon_sid
-
 def generate_vimshottari_dasa(moon_lon):
     nak = int(moon_lon * 27 / 360)
     lord_idx = nak % 9
@@ -127,9 +113,17 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         raise ValueError("Time must be in HH:MM format (24-hour)")
     local_dt = datetime.combine(date_obj, datetime.min.time().replace(hour=hour, minute=minute))
     utc_dt = local_dt - timedelta(hours=tz_offset)
-    lon_sid = compute_sidereal_positions(utc_dt)
-    jd = Time(utc_dt).jd
-    ayan = get_lahiri_ayanamsa(utc_dt.year)
+    t = Time(utc_dt); jd = t.jd; ayan = get_lahiri_ayanamsa(utc_dt.year)
+
+    with solar_system_ephemeris.set('builtin'):
+        lon_trop = {}
+        for nm in ['sun','moon','mercury','venus','mars','jupiter','saturn']:
+            ecl = get_body(nm, t).transform_to(GeocentricTrueEcliptic()); lon_trop[nm] = ecl.lon.deg
+    d = jd - 2451545.0; T = d/36525.0
+    omega = (125.04452 - 1934.136261*T + 0.0020708*T**2 + T**3/450000) % 360
+    lon_trop['rahu'] = omega; lon_trop['ketu'] = (omega + 180) % 360
+
+    lon_sid = {p: get_sidereal_lon(lon_trop[p], ayan) for p in lon_trop}
     lagna_sid = get_sidereal_lon(get_ascendant(jd, lat, lon), ayan)
 
     # planets table
@@ -199,8 +193,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         'nav_lagna_sign': get_sign(nav_lagna), 'moon_rasi': get_sign(moon_lon),
         'moon_nakshatra': get_nakshatra_details(moon_lon)[0], 'moon_pada': get_nakshatra_details(moon_lon)[1],
         'selected_depth': depth_map[max_depth], 'utc_dt': utc_dt, 'max_depth': max_depth,
-        'house_to_planets_rasi': house_planets_rasi, 'house_to_planets_nav': house_planets_nav,
-        'natal_moon_lon': moon_lon, 'tz_offset': tz_offset
+        'house_to_planets_rasi': house_planets_rasi, 'house_to_planets_nav': house_planets_nav
     }
 
 # ---- South Indian plotter ONLY (extra top padding) ----
@@ -383,48 +376,6 @@ if st.session_state.chart_data:
 
     st.subheader("House Analysis")
     st.dataframe(cd['df_house_status'], hide_index=True, use_container_width=True)
-
-    # Today's Rasi Effects
-    utc_now = datetime.utcnow()
-    tz_offset = cd['tz_offset']
-    local_now = utc_now + timedelta(hours=tz_offset)
-    today_date_obj = local_now.date()
-    today_time_str = local_now.strftime('%H:%M')
-    hour, minute = map(int, today_time_str.split(':'))
-    local_dt_today = datetime.combine(today_date_obj, datetime.min.time().replace(hour=hour, minute=minute))
-    utc_dt_today = local_dt_today - timedelta(hours=tz_offset)
-    lon_sid_today = compute_sidereal_positions(utc_dt_today)
-
-    chandra_lagna_lon = cd['natal_moon_lon']
-    transit_planet_to_house = {p.capitalize(): get_house(lon_sid_today[p], chandra_lagna_lon) for p in lon_sid_today}
-    house_planets_transit = defaultdict(list)
-    for p, h in transit_planet_to_house.items():
-        house_planets_transit[h].append(p)
-    aspects_dict = {'Sun':[7],'Moon':[7],'Mars':[4,7,8],'Mercury':[7],'Jupiter':[5,7,9],'Venus':[7],'Saturn':[3,7,10]}
-    house_status_today = []
-    for h in range(1,13):
-        house_sign_deg = (chandra_lagna_lon + (h-1)*30 ) % 360
-        house_sign = get_sign(house_sign_deg)
-        lord = sign_lords[sign_names.index(house_sign)]
-        planets = sorted(house_planets_transit[h])
-        asp = []
-        for planet, offs in aspects_dict.items():
-            if planet in transit_planet_to_house:
-                ph = transit_planet_to_house[planet]
-                for off in offs:
-                    if ((ph-1 + (off-1)) % 12 ) + 1 == h:
-                        asp.append(planet)
-        lord_house = get_house(lon_sid_today[lord.lower()], chandra_lagna_lon)
-        house_status_today.append([f"House {h}",
-                                   ', '.join(planets) if planets else 'Empty',
-                                   ', '.join(sorted(asp)) if asp else 'None',
-                                   lord,
-                                   f"House {lord_house}"])
-    df_transit_house = pd.DataFrame(house_status_today, columns=['House','Planets (Transit)','Aspects from','Lord','Lord in (Transit)'])
-
-    st.subheader("Today's Rasi Effects (Chandra Lagna)")
-    st.dataframe(df_transit_house, hide_index=True, use_container_width=True)
-    st.caption(f"Based on transits as of {local_now.strftime('%Y-%m-%d %H:%M')} local time")
 
     # Vimshottari with full nested expanders
     st.subheader(f"Vimshottari Dasa ({cd['selected_depth']})")
