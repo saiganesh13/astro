@@ -69,7 +69,7 @@ def get_nakshatra_details(lon):
 def compute_sidereal_positions(utc_dt):
     t = Time(utc_dt); jd = t.jd; ayan = get_lahiri_ayanamsa(utc_dt.year)
 
-    with solar_system_ephemeris.set('jpl'):
+    with solar_system_ephemeris.set('builtin'):
         lon_trop = {}
         for nm in ['sun','moon','mercury','venus','mars','jupiter','saturn']:
             ecl = get_body(nm, t).transform_to(GeocentricTrueEcliptic()); lon_trop[nm] = ecl.lon.deg
@@ -461,7 +461,7 @@ if st.session_state.chart_data:
                                    f"House {lord_house}"])
     df_transit_house = pd.DataFrame(house_status_today, columns=['House','Planets (Transit)','Aspects from','Lord','Lord in (Transit)'])
 
-    st.subheader("Today's Rasi Effects (Chandra Lagna)")
+    st.subheader("Today's Rasi Effects")
     st.dataframe(df_transit_house, hide_index=True, use_container_width=True)
     st.caption(f"Based on transits as of {local_now.strftime('%Y-%m-%d %H:%M')} local time")
 
@@ -471,7 +471,7 @@ if st.session_state.chart_data:
     render_period_tree(cd['dasa_periods_filtered'], 'dasa', current_path, local_now, cd['max_depth'])
     st.info("Note: Periods are filtered from birth time; durations are approximate. Click expanders to view sub-periods.")
 else:
-    st.info("Enter details above and click 'Generate Chart' to begin. Note: For accurate planetary positions, install jplephem: pip install jplephem")
+    st.info("Enter details above and click 'Generate Chart' to begin.")
 
 st.markdown("---")
 st.caption("Sivapathy Astrology Data Generator")
