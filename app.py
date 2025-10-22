@@ -118,6 +118,41 @@ def duration_str(delta, level='dasa'):
     m = int(rem/30.4375); d = int(rem % 30.4375)
     return "Less than 1 day" if y+m+d==0 else f"{y}y {m}m {d}d"
 
+def next_level_dict():
+    return {'dasa': 'bhukti', 'bhukti': 'anthara', 'anthara': 'sukshma', 'sukshma': 'prana', 'prana': 'sub_prana', 'sub_prana': None}
+
+def find_current_path(periods, now, level='dasa', path=[]):
+    nl = next_level_dict().get(level)
+    for lord, start, end, subs in periods:
+        if start <= now < end:
+            new_path = path + [(level, lord)]
+            if nl and subs:
+                sub_path = find_current_path(subs, now, nl, new_path)
+                return sub_path
+            else:
+                return new_path
+    return []
+
+def render_period_tree(periods, level='dasa', remaining_path=[], now=None, max_depth=1):
+    nl = next_level_dict().get(level)
+    for lord, start, end, subs in periods:
+        expanded = False
+        if remaining_path and remaining_path[0][0] == level and remaining_path[0][1] == lord:
+            expanded = True
+        with st.expander(f"{lord} {level.capitalize()} ({start.strftime('%Y-%m-%d')} - {end.strftime('%Y-%m-%d')}) — {duration_str(end - start, level)}", expanded=expanded):
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.markdown(f"**{lord} {level.capitalize()}**")
+            with col2:
+                st.caption(duration_str(end - start, level))
+            if start <= now < end:
+                if not subs or not nl:
+                    st.success("🟢 Current Active Period")
+                else:
+                    st.info("🔄 Active Period (expand for sub-periods)")
+            if subs and nl:
+                render_period_tree(subs, nl, remaining_path[1:] if remaining_path and remaining_path[0][1] == lord else [], now, max_depth)
+
 def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     # parse time
     try:
@@ -430,70 +465,11 @@ if st.session_state.chart_data:
     st.dataframe(df_transit_house, hide_index=True, use_container_width=True)
     st.caption(f"Based on transits as of {local_now.strftime('%Y-%m-%d %H:%M')} local time")
 
-    # Vimshottari with full nested expanders
-    st.subheader(f"Vimshottari Dasa ({cd['selected_depth']})")
-    dasa_rows = [{'Planet': lord, 'Start': s.strftime('%Y-%m-%d'),
-                  'End': e.strftime('%Y-%m-%d'), 'Duration': duration_str(e-s,'dasa')}
-                 for lord, s, e, _ in cd['dasa_periods_filtered']]
-    st.dataframe(pd.DataFrame(dasa_rows), hide_index=True, use_container_width=True)
-
-    max_depth = cd['max_depth']
-    dp = cd['dasa_periods_filtered']
-    if max_depth >= 2:
-        with st.expander("View Bhuktis (Sub-periods)", expanded=False):
-            if dp:
-                d_opt = [f"{p[0]} ({p[1].strftime('%Y-%m-%d')} - {p[2].strftime('%Y-%m-%d')})" for p in dp]
-                sel = st.selectbox("Select Dasa:", d_opt, key="dasa_select")
-                bhuktis = dp[d_opt.index(sel)][3]
-                st.dataframe(pd.DataFrame(
-                    [{'Planet': l, 'Start': s.strftime('%Y-%m-%d'), 'End': e.strftime('%Y-%m-%d'),
-                      'Duration': duration_str(e-s,'bhukti')} for l,s,e,_ in bhuktis]),
-                    hide_index=True, use_container_width=True)
-                if max_depth >= 3:
-                    with st.expander("View Antharas", expanded=False):
-                        if bhuktis:
-                            b_opt = [f"{p[0]} ({p[1].strftime('%Y-%m-%d')} - {p[2].strftime('%Y-%m-%d')})" for p in bhuktis]
-                            selb = st.selectbox("Select Bhukti:", b_opt, key="bhukti_select")
-                            antharas = bhuktis[b_opt.index(selb)][3]
-                            st.dataframe(pd.DataFrame(
-                                [{'Planet': l, 'Start': s.strftime('%Y-%m-%d %H:%M'),
-                                  'End': e.strftime('%Y-%m-%d %H:%M'),
-                                  'Duration': duration_str(e-s,'anthara')} for l,s,e,_ in antharas]),
-                                hide_index=True, use_container_width=True)
-                            if max_depth >= 4:
-                                with st.expander("View Sukshmas", expanded=False):
-                                    if antharas:
-                                        a_opt = [f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" for p in antharas]
-                                        sela = st.selectbox("Select Anthara:", a_opt, key="anthara_select")
-                                        sukshmas = antharas[a_opt.index(sela)][3]
-                                        st.dataframe(pd.DataFrame(
-                                            [{'Planet': l, 'Start': s.strftime('%Y-%m-%d %H:%M'),
-                                              'End': e.strftime('%Y-%m-%d %H:%M'),
-                                              'Duration': duration_str(e-s,'sukshma')} for l,s,e,_ in sukshmas]),
-                                            hide_index=True, use_container_width=True)
-                                        if max_depth >= 5:
-                                            with st.expander("View Pranas", expanded=False):
-                                                if sukshmas:
-                                                    s_opt = [f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" for p in sukshmas]
-                                                    sels = st.selectbox("Select Sukshma:", s_opt, key="sukshma_select")
-                                                    pranas = sukshmas[s_opt.index(sels)][3]
-                                                    st.dataframe(pd.DataFrame(
-                                                        [{'Planet': l, 'Start': s.strftime('%Y-%m-%d %H:%M'),
-                                                          'End': e.strftime('%Y-%m-%d %H:%M'),
-                                                          'Duration': duration_str(e-s,'prana')} for l,s,e,_ in pranas]),
-                                                        hide_index=True, use_container_width=True)
-                                                    if max_depth >= 6:
-                                                        with st.expander("View Sub-Pranas", expanded=False):
-                                                            if pranas:
-                                                                p_opt = [f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" for p in pranas]
-                                                                selp = st.selectbox("Select Prana:", p_opt, key="prana_select")
-                                                                subp = pranas[p_opt.index(selp)][3]
-                                                                st.dataframe(pd.DataFrame(
-                                                                    [{'Planet': l, 'Start': s.strftime('%Y-%m-%d %H:%M'),
-                                                                      'End': e.strftime('%Y-%m-%d %H:%M'),
-                                                                      'Duration': duration_str(e-s,'sub_prana')} for l,s,e,_ in subp]),
-                                                                    hide_index=True, use_container_width=True)
-    st.info("Note: Periods are filtered from birth time; durations are approximate.")
+    # Vimshottari Dasa Tree
+    current_path = find_current_path(cd['dasa_periods_filtered'], local_now, 'dasa', [])
+    st.subheader(f"Vimshottari Dasa ({cd['selected_depth']}) — Current as of {local_now.strftime('%Y-%m-%d %H:%M')} local time")
+    render_period_tree(cd['dasa_periods_filtered'], 'dasa', current_path, local_now, cd['max_depth'])
+    st.info("Note: Periods are filtered from birth time; durations are approximate. Click expanders to view sub-periods.")
 else:
     st.info("Enter details above and click 'Generate Chart' to begin. Note: For accurate planetary positions, install jplephem: pip install jplephem")
 
