@@ -127,48 +127,52 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         raise ValueError("Time must be in HH:MM format (24-hour)")
     local_dt = datetime.combine(date_obj, datetime.min.time().replace(hour=hour, minute=minute))
     utc_dt = local_dt - timedelta(hours=tz_offset)
-    lon_sid = compute_sidereal_positions(utc_dt)
+    precise_lon = compute_sidereal_positions(utc_dt)
     jd = Time(utc_dt).jd
     ayan = get_lahiri_ayanamsa(utc_dt.year)
-    lagna_sid = get_sidereal_lon(get_ascendant(jd, lat, lon), ayan)
+    precise_lagna = get_sidereal_lon(get_ascendant(jd, lat, lon), ayan)
+    rounded_lagna = int(round(precise_lagna)) % 360
+    rounded_lon = {p: int(round(precise_lon[p])) % 360 for p in precise_lon}
 
     # planets table
     rows = []
-    asc_deg = lagna_sid % 360; asc_sign = get_sign(asc_deg)
+    asc_deg = rounded_lagna; asc_sign = get_sign(asc_deg)
     a_nak, a_pada, a_ld, a_sl = get_nakshatra_details(asc_deg)
-    rows.append(['Asc', f"{round(asc_deg)}", asc_sign, a_nak, a_pada, f"{a_ld}/{a_sl}"])
+    rows.append(['Asc', f"{asc_deg}", asc_sign, a_nak, a_pada, f"{a_ld}/{a_sl}"])
     for p in ['sun','moon','mars','mercury','jupiter','venus','saturn','rahu','ketu']:
-        L = lon_sid[p]; sign = get_sign(L); nak, pada, ld, sl = get_nakshatra_details(L)
-        rows.append([p.capitalize(), f"{round(L)}", sign, nak, pada, f"{ld}/{sl}"])
+        L = rounded_lon[p]; sign = get_sign(L); nak, pada, ld, sl = get_nakshatra_details(L)
+        rows.append([p.capitalize(), f"{L}", sign, nak, pada, f"{ld}/{sl}"])
     df_planets = pd.DataFrame(rows, columns=['Planet','Deg','Sign','Nakshatra','Pada','Ld/SL'])
 
     # rasi houses
-    house_planets_rasi = defaultdict(list); positions = {**lon_sid,'asc':lagna_sid}
+    house_planets_rasi = defaultdict(list); positions = {**rounded_lon,'asc':rounded_lagna}
     for p,L in positions.items():
-        house_planets_rasi[get_house(L, lagna_sid)].append(p.capitalize() if p!='asc' else 'Asc')
-    df_rasi = pd.DataFrame([[f"House {h}", get_sign((lagna_sid+(h-1)*30)%360),
+        house_planets_rasi[get_house(L, rounded_lagna)].append(p.capitalize() if p!='asc' else 'Asc')
+    df_rasi = pd.DataFrame([[f"House {h}", get_sign((rounded_lagna+(h-1)*30)%360),
                              ', '.join(sorted(house_planets_rasi[h])) if house_planets_rasi[h] else 'Empty']
                             for h in range(1,13)], columns=['House','Sign','Planets'])
 
     # navamsa
-    nav_lagna = (lagna_sid*9) % 360
+    nav_lagna = (rounded_lagna*9) % 360
     house_planets_nav = defaultdict(list)
-    for p,L in lon_sid.items():
+    for p,L in rounded_lon.items():
         nav_lon = (L*9) % 360
-        nav_h = (int(nav_lon/30) - int(nav_lagna/30)) % 12 + 1
+        nav_h = get_house(nav_lon, nav_lagna)
         house_planets_nav[nav_h].append(p.capitalize())
     df_nav = pd.DataFrame([[f"House {h}", get_sign((nav_lagna+(h-1)*30)%360),
                              ', '.join(sorted(house_planets_nav[h])) if house_planets_nav[h] else 'Empty']
                             for h in range(1,13)], columns=['House','Sign','Planets'])
 
-    # aspects table (unchanged logic)
-    lagna_sign = get_sign(lagna_sid)
+    # aspects table
+    lagna_sign = get_sign(rounded_lagna)
     aspects_dict = {'Sun':[7],'Moon':[7],'Mars':[4,7,8],'Mercury':[7],'Jupiter':[5,7,9],'Venus':[7],'Saturn':[3,7,10]}
-    planet_to_house = {p.capitalize(): get_house(lon_sid[p], lagna_sid) for p in lon_sid}
+    planet_to_house = {}
+    for pp in rounded_lon:
+        planet_to_house[pp.capitalize()] = get_house(rounded_lon[pp], rounded_lagna)
     house_status = []
     for h in range(1,13):
         lord = sign_lords[(sign_names.index(lagna_sign)+(h-1))%12]
-        lord_house = planet_to_house[lord]
+        lord_house = planet_to_house.get(lord, 'N/A')
         asp = []
         for planet, offs in aspects_dict.items():
             if planet in planet_to_house:
@@ -177,11 +181,11 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                     if ((ph-1+(off-1))%12)+1 == h: asp.append(planet)
         house_status.append([f"House {h}",
                              ', '.join(sorted(house_planets_rasi[h])) if house_planets_rasi[h] else 'Empty',
-                             ', '.join(asp) if asp else 'None', lord, f"House {lord_house}"])
+                             ', '.join(asp) if asp else 'None', lord, f"House {lord_house}" if lord_house != 'N/A' else 'N/A'])
     df_house_status = pd.DataFrame(house_status, columns=['House','Planets','Aspects from','Lord','Lord in'])
 
     # dasa tree
-    moon_lon = lon_sid['moon']
+    moon_lon = rounded_lon['moon']
     idx, bal = generate_vimshottari_dasa(moon_lon)
     full_first = years[idx]; passed = full_first - bal
     dasa_start = utc_dt - timedelta(days=passed*365.25)
@@ -195,7 +199,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     return {
         'name': name, 'df_planets': df_planets, 'df_rasi': df_rasi, 'df_nav': df_nav,
         'df_house_status': df_house_status, 'dasa_periods_filtered': dasa_filtered,
-        'lagna_sid': lagna_sid, 'nav_lagna': nav_lagna, 'lagna_sign': lagna_sign,
+        'lagna_sid': rounded_lagna, 'nav_lagna': nav_lagna, 'lagna_sign': lagna_sign,
         'nav_lagna_sign': get_sign(nav_lagna), 'moon_rasi': get_sign(moon_lon),
         'moon_nakshatra': get_nakshatra_details(moon_lon)[0], 'moon_pada': get_nakshatra_details(moon_lon)[1],
         'selected_depth': depth_map[max_depth], 'utc_dt': utc_dt, 'max_depth': max_depth,
@@ -357,7 +361,7 @@ if st.session_state.chart_data:
     <div class="summary-box">
         <h3>Chart Summary</h3>
         <div class="summary-item"><strong>Name:</strong> {cd['name']}</div>
-        <div class="summary-item"><strong>Lagna:</strong> {cd['lagna_sign']} ({round(cd['lagna_sid'])}°)</div>
+        <div class="summary-item"><strong>Lagna:</strong> {cd['lagna_sign']} ({cd['lagna_sid']}°)</div>
         <div class="summary-item"><strong>Rasi (Moon Sign):</strong> {cd['moon_rasi']}</div>
         <div class="summary-item"><strong>Nakshatra:</strong> {cd['moon_nakshatra']} (Pada {cd['moon_pada']})</div>
     </div>
@@ -393,10 +397,10 @@ if st.session_state.chart_data:
     hour, minute = map(int, today_time_str.split(':'))
     local_dt_today = datetime.combine(today_date_obj, datetime.min.time().replace(hour=hour, minute=minute))
     utc_dt_today = local_dt_today - timedelta(hours=tz_offset)
-    lon_sid_today = compute_sidereal_positions(utc_dt_today)
-
+    precise_lon_today = compute_sidereal_positions(utc_dt_today)
+    rounded_today = {p: int(round(precise_lon_today[p])) % 360 for p in precise_lon_today}
     chandra_lagna_lon = cd['natal_moon_lon']
-    transit_planet_to_house = {p.capitalize(): get_house(lon_sid_today[p], chandra_lagna_lon) for p in lon_sid_today}
+    transit_planet_to_house = {p.capitalize(): get_house(rounded_today[p], chandra_lagna_lon) for p in precise_lon_today}
     house_planets_transit = defaultdict(list)
     for p, h in transit_planet_to_house.items():
         house_planets_transit[h].append(p)
@@ -414,7 +418,7 @@ if st.session_state.chart_data:
                 for off in offs:
                     if ((ph-1 + (off-1)) % 12 ) + 1 == h:
                         asp.append(planet)
-        lord_house = get_house(lon_sid_today[lord.lower()], chandra_lagna_lon)
+        lord_house = get_house(rounded_today.get(lord.lower(), 0), chandra_lagna_lon)
         house_status_today.append([f"House {h}",
                                    ', '.join(planets) if planets else 'Empty',
                                    ', '.join(sorted(asp)) if asp else 'None',
