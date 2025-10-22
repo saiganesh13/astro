@@ -211,19 +211,37 @@ def render_period_tree(periods, level='dasa', current_path=[], full_current_path
                 load_deeper = path_str in st.session_state.deeper_loaded or (is_current_suk and len(full_current_path) > 4)
 
                 if load_deeper:
-                    # Compute and render deeper
+                    # Compute and render deeper (prana without sub_prana for speed)
                     lord_idx = lords_full.index(lord)
                     total_y = (end - start).total_seconds() / (86400 * 365.25)
-                    prana_periods = generate_periods(start, lord_idx, total_y, 'prana', 6)
+                    prana_periods = generate_periods(start, lord_idx, total_y, 'prana', 5)  # max_depth=5 to avoid generating sub_prana yet
                     # Filter prana from 'now' if needed, but since short, full ok
                     if nl:
-                        render_period_tree(prana_periods, nl, this_path, full_current_path, now, 6)
+                        render_period_tree(prana_periods, nl, this_path, full_current_path, now, 5)
                 else:
                     # Show load button
                     if st.button(f"Load Prana/Sub-Prana for {lord} ({duration_str(end - start, level)})", key=f"load_btn_{path_str}"):
                         st.session_state.deeper_loaded[path_str] = True
                         st.rerun()
                     st.caption("Click to load detailed sub-periods (Prana & Sub-Prana).")
+            # Special handling for Prana: lazy load sub_prana
+            elif level == 'prana':
+                is_current_prana = any(this_path == full_current_path[:len(this_path)] for _ in [1])
+                load_deeper = path_str in st.session_state.deeper_loaded or (is_current_prana and len(full_current_path) > 5)
+
+                if load_deeper:
+                    # Compute and render sub_prana
+                    lord_idx = lords_full.index(lord)
+                    total_y = (end - start).total_seconds() / (86400 * 365.25)
+                    sub_prana_periods = generate_periods(start, lord_idx, total_y, 'sub_prana', 6)
+                    if nl:
+                        render_period_tree(sub_prana_periods, nl, this_path, full_current_path, now, 6)
+                else:
+                    # Show load button
+                    if st.button(f"Load Sub-Prana for {lord} ({duration_str(end - start, level)})", key=f"load_btn_prana_{path_str}"):
+                        st.session_state.deeper_loaded[path_str] = True
+                        st.rerun()
+                    st.caption("Click to load detailed Sub-Prana periods.")
             elif subs and nl:
                 render_period_tree(subs, nl, this_path, full_current_path, now, max_depth)
 
@@ -549,9 +567,16 @@ if st.session_state.chart_data:
             st.session_state.deeper_loaded = st.session_state.get('deeper_loaded', {})
             st.session_state.deeper_loaded[suk_path_str] = True
             st.rerun()  # Re-run to load
+    if len(full_current_path) > 5:  # Beyond Prana
+        pra_prefix = full_current_path[:5]  # dasa, bhukti, anthara, sukshma, prana
+        pra_path_str = '_'.join([f"{pl}_{sl}" for pl, sl in pra_prefix])
+        if 'deeper_loaded' not in st.session_state or pra_path_str not in st.session_state.deeper_loaded:
+            st.session_state.deeper_loaded = st.session_state.get('deeper_loaded', {})
+            st.session_state.deeper_loaded[pra_path_str] = True
+            st.rerun()  # Re-run to load
 
     render_period_tree(cd['dasa_periods_filtered'], 'dasa', [], full_current_path, local_now, tree_max_depth)
-    st.info("Tree loads up to Sukshma for speed. Click 'Load Prana/Sub-Prana' buttons to expand deeper branches individually. Current branch auto-loads if deeper active. Prana/Sub-Prana show times in HH:MM.")
+    st.info("Tree loads up to Sukshma for speed. Click 'Load Prana/Sub-Prana' buttons under Sukshma to expand Prana (with exact start/end times). Then click 'Load Sub-Prana' under current Prana for Sub-Prana periods (with HH:MM times). Current branch auto-loads if deeper active.")
 else:
     st.info("Enter details above and click 'Generate Chart' to begin. Note: For accurate planetary positions, install jplephem: pip install jplephem")
 
