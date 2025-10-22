@@ -97,7 +97,8 @@ def generate_periods(start_date, lord_idx, total_years, level='dasa', max_depth=
     while remaining > 0:
         lord = lords_full[i]; y_full = years[i]
         y = min((y_full/120)*total_years, remaining)
-        end = current + timedelta(days=y*365.25)
+        # Use seconds for precision in short periods
+        end = current + timedelta(seconds=y * 365.25 * 86400)
         subs = generate_periods(current, i, y, next_level[depth], max_depth) if (depth < max_depth-1 and next_level[depth]) else []
         periods.append((lord, current, end, subs))
         remaining -= y; current = end; i = (i+1) % 9
@@ -119,13 +120,20 @@ def duration_str(delta, level='dasa'):
     m = int(rem/30.4375); d = int(rem % 30.4375)
     return "Less than 1 day" if y+m+d==0 else f"{y}y {m}m {d}d"
 
+def format_period_dates(start, end, level):
+    """Format start/end with time for short levels"""
+    if level in ['prana', 'sub_prana']:
+        return start.strftime('%Y-%m-%d %H:%M'), end.strftime('%Y-%m-%d %H:%M')
+    else:
+        return start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d')
+
 # ---- Iterative current path finder (fast) ----
 @st.cache_data
 def get_current_dasa_path(_now, _birth_utc, _moon_lon, max_level=6, full_info=False):
     idx, bal = generate_vimshottari_dasa(_moon_lon)
     full_first = years[idx]
     passed = full_first - bal
-    dasa_start = _birth_utc - timedelta(days=passed*365.25)
+    dasa_start = _birth_utc - timedelta(seconds=passed * 365.25 * 86400)
     time_from_dasa_start = (_now - dasa_start).total_seconds() / 86400
     path = []
     current_total_years = 120.0
@@ -148,8 +156,8 @@ def get_current_dasa_path(_now, _birth_utc, _moon_lon, max_level=6, full_info=Fa
             sub_days = sub_y * 365.25
             if cum_days <= rel_days_from_start < cum_days + sub_days:
                 found_lord = lords_full[sub_idx]
-                found_start = current_start_date + timedelta(days=cum_days)
-                found_end = found_start + timedelta(days=sub_days)
+                found_start = current_start_date + timedelta(seconds=cum_days * 86400)
+                found_end = found_start + timedelta(seconds=sub_days * 86400)
                 found_sub_idx = sub_idx
                 break
             cum_days += sub_days
@@ -181,7 +189,8 @@ def render_period_tree(periods, level='dasa', current_path=[], full_current_path
         path_str = '_'.join([f"{pl}_{sl}" for pl, sl in this_path])
         expanded = any(this_path == full_current_path[:len(this_path)] for _ in [1])  # Matches prefix of full path
 
-        with st.expander(f"{lord} {level.capitalize()} ({start.strftime('%Y-%m-%d')} - {end.strftime('%Y-%m-%d')}) — {duration_str(end - start, level)}", expanded=expanded):
+        start_fmt, end_fmt = format_period_dates(start, end, level)
+        with st.expander(f"{lord} {level.capitalize()} ({start_fmt} - {end_fmt}) — {duration_str(end - start, level)}", expanded=expanded):
             col1, col2 = st.columns([3, 1])
             with col1:
                 st.markdown(f"**{lord} {level.capitalize()}**")
@@ -285,7 +294,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, tree_max_depth)
     moon_lon = rounded_lon['moon']
     idx, bal = generate_vimshottari_dasa(moon_lon)
     full_first = years[idx]; passed = full_first - bal
-    dasa_start = utc_dt - timedelta(days=passed*365.25)
+    dasa_start = utc_dt - timedelta(seconds=passed * 365.25 * 86400)
     dasa = generate_periods(dasa_start, idx, 120, 'dasa', 4)
     dasa_filtered = filter_from_birth(dasa, utc_dt)
 
@@ -539,7 +548,7 @@ if st.session_state.chart_data:
             st.rerun()  # Re-run to load
 
     render_period_tree(cd['dasa_periods_filtered'], 'dasa', [], full_current_path, local_now, tree_max_depth)
-    st.info("Tree loads up to Sukshma for speed. Click 'Load Prana/Sub-Prana' buttons to expand deeper branches individually. Current branch auto-loads if deeper active.")
+    st.info("Tree loads up to Sukshma for speed. Click 'Load Prana/Sub-Prana' buttons to expand deeper branches individually. Current branch auto-loads if deeper active. Prana/Sub-Prana show times in HH:MM.")
 else:
     st.info("Enter details above and click 'Generate Chart' to begin. Note: For accurate planetary positions, install jplephem: pip install jplephem")
 
