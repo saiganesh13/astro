@@ -3,3 +3,4 @@ pandas
 geopy
 astropy
 matplotlib
+jplephem
