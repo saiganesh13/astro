@@ -69,7 +69,7 @@ def get_nakshatra_details(lon):
 def compute_sidereal_positions(utc_dt):
     t = Time(utc_dt); jd = t.jd; ayan = get_lahiri_ayanamsa(utc_dt.year)
 
-    with solar_system_ephemeris.set('builtin'):
+    with solar_system_ephemeris.set('jpl'):
         lon_trop = {}
         for nm in ['sun','moon','mercury','venus','mars','jupiter','saturn']:
             ecl = get_body(nm, t).transform_to(GeocentricTrueEcliptic()); lon_trop[nm] = ecl.lon.deg
@@ -491,7 +491,7 @@ if st.session_state.chart_data:
                                                                     hide_index=True, use_container_width=True)
     st.info("Note: Periods are filtered from birth time; durations are approximate.")
 else:
-    st.info("Enter details above and click 'Generate Chart' to begin")
+    st.info("Enter details above and click 'Generate Chart' to begin. Note: For accurate planetary positions, install jplephem: pip install jplephem")
 
 st.markdown("---")
 st.caption("Sivapathy Astrology Data Generator")
