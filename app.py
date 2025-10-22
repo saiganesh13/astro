@@ -89,7 +89,7 @@ def generate_vimshottari_dasa(moon_lon):
     fraction = pos_in_nak / (360/27)
     return lord_idx, y * (1 - fraction)
 
-def generate_periods(start_date, lord_idx, total_years, level='dasa', max_depth=3):
+def generate_periods(start_date, lord_idx, total_years, level='dasa', max_depth=4):
     periods, remaining, i, current = [], total_years, lord_idx, start_date
     depth_map = {'dasa':0,'bhukti':1,'anthara':2,'sukshma':3,'prana':4,'sub_prana':5}
     next_level = {0:'bhukti',1:'anthara',2:'sukshma',3:'prana',4:'sub_prana',5:None}
@@ -98,7 +98,6 @@ def generate_periods(start_date, lord_idx, total_years, level='dasa', max_depth=
         lord = lords_full[i]; y_full = years[i]
         y = min((y_full/120)*total_years, remaining)
         end = current + timedelta(days=y*365.25)
-        # Cap subs to avoid deep recursion—only if needed for tree depth
         subs = generate_periods(current, i, y, next_level[depth], max_depth) if (depth < max_depth-1 and next_level[depth]) else []
         periods.append((lord, current, end, subs))
         remaining -= y; current = end; i = (i+1) % 9
@@ -120,35 +119,67 @@ def duration_str(delta, level='dasa'):
     m = int(rem/30.4375); d = int(rem % 30.4375)
     return "Less than 1 day" if y+m+d==0 else f"{y}y {m}m {d}d"
 
-# ---- Existing render helpers (updated for deeper integration) ----
-def find_current_path(periods, now, level='dasa', path=[]):
-    nl = {'dasa': 'bhukti', 'bhukti': 'anthara', 'anthara': 'sukshma', 'sukshma': 'prana', 'prana': 'sub_prana', 'sub_prana': None}.get(level)
-    for lord, start, end, subs in periods:
-        if start <= now < end:
-            new_path = path + [(level, lord)]
-            if nl and subs:
-                sub_path = find_current_path(subs, now, nl, new_path)
-                return sub_path
+# ---- Iterative current path finder (fast) ----
+@st.cache_data
+def get_current_dasa_path(_now, _birth_utc, _moon_lon, max_level=6, full_info=False):
+    idx, bal = generate_vimshottari_dasa(_moon_lon)
+    full_first = years[idx]
+    passed = full_first - bal
+    dasa_start = _birth_utc - timedelta(days=passed*365.25)
+    time_from_dasa_start = (_now - dasa_start).total_seconds() / 86400
+    path = []
+    current_total_years = 120.0
+    current_start_date = dasa_start
+    current_level = 'dasa'
+    current_start_idx = idx
+    rel_days_from_start = time_from_dasa_start
+
+    level_count = 0
+    while current_level and level_count < max_level:
+        cum_days = 0.0
+        found_lord = None
+        found_start = None
+        found_end = None
+        found_sub_idx = None
+        for k in range(9):
+            sub_idx = (current_start_idx + k) % 9
+            sub_full_y = years[sub_idx]
+            sub_y = (sub_full_y / 120) * current_total_years
+            sub_days = sub_y * 365.25
+            if cum_days <= rel_days_from_start < cum_days + sub_days:
+                found_lord = lords_full[sub_idx]
+                found_start = current_start_date + timedelta(days=cum_days)
+                found_end = found_start + timedelta(days=sub_days)
+                found_sub_idx = sub_idx
+                break
+            cum_days += sub_days
+
+        if found_lord:
+            if full_info:
+                path.append((current_level, found_lord, found_start, found_end, duration_str(found_end - found_start, current_level)))
             else:
-                return new_path
-    return []
+                path.append((current_level, found_lord))
+            current_start_date = found_start
+            current_total_years = (found_end - found_start).total_seconds() / (86400 * 365.25)
+            current_start_idx = found_sub_idx
+            current_level = {'dasa': 'bhukti', 'bhukti': 'anthara', 'anthara': 'sukshma', 'sukshma': 'prana', 'prana': 'sub_prana', 'sub_prana': None}.get(current_level)
+            rel_days_from_start -= cum_days
+            level_count += 1
+        else:
+            break
 
-def render_period_tree(periods, level='dasa', remaining_path=[], now=None, max_depth=3, deeper_enabled=False):
+    return path
+
+# ---- Render tree with lazy deeper ----
+def render_period_tree(periods, level='dasa', current_path=[], full_current_path=[], now=None, max_depth=4):
+    if 'deeper_loaded' not in st.session_state:
+        st.session_state.deeper_loaded = {}
+
     nl = {'dasa': 'bhukti', 'bhukti': 'anthara', 'anthara': 'sukshma', 'sukshma': 'prana', 'prana': 'sub_prana', 'sub_prana': None}.get(level)
     for lord, start, end, subs in periods:
-        expanded = False
-        if remaining_path and remaining_path[0][0] == level and remaining_path[0][1] == lord:
-            expanded = True
-
-        # For current Sukshma, enable deeper subs if flag set
-        display_subs = subs
-        if level == 'sukshma' and start <= now < end and deeper_enabled and nl:
-            lord_idx = lords_full.index(lord)
-            total_y = (end - start).total_seconds() / (86400 * 365.25)
-            prana_periods = generate_periods(start, lord_idx, total_y, 'prana', 6)
-            display_subs = prana_periods
-            # Auto-expand the Sukshma if deeper enabled
-            expanded = True
+        this_path = current_path + [(level, lord)]
+        path_str = '_'.join([f"{pl}_{sl}" for pl, sl in this_path])
+        expanded = any(this_path == full_current_path[:len(this_path)] for _ in [1])  # Matches prefix of full path
 
         with st.expander(f"{lord} {level.capitalize()} ({start.strftime('%Y-%m-%d')} - {end.strftime('%Y-%m-%d')}) — {duration_str(end - start, level)}", expanded=expanded):
             col1, col2 = st.columns([3, 1])
@@ -157,14 +188,34 @@ def render_period_tree(periods, level='dasa', remaining_path=[], now=None, max_d
             with col2:
                 st.caption(duration_str(end - start, level))
             if start <= now < end:
-                if not display_subs or not nl:
+                if not subs or not nl:
                     st.success("🟢 Current Active Period")
                 else:
                     st.info("🔄 Active Period (expand for sub-periods)")
-            if display_subs and nl:
-                render_period_tree(display_subs, nl, remaining_path[1:] if remaining_path and remaining_path[0][1] == lord else [], now, max_depth if level != 'sukshma' else 6, deeper_enabled)
 
-def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, tree_max_depth):  # Updated to use tree_max_depth
+            # Special handling for Sukshma: lazy load deeper
+            if level == 'sukshma':
+                is_current_suk = any(this_path == full_current_path[:len(this_path)] for _ in [1])
+                load_deeper = path_str in st.session_state.deeper_loaded or (is_current_suk and len(full_current_path) > 4)
+
+                if load_deeper:
+                    # Compute and render deeper
+                    lord_idx = lords_full.index(lord)
+                    total_y = (end - start).total_seconds() / (86400 * 365.25)
+                    prana_periods = generate_periods(start, lord_idx, total_y, 'prana', 6)
+                    # Filter prana from 'now' if needed, but since short, full ok
+                    if nl:
+                        render_period_tree(prana_periods, nl, this_path, full_current_path, now, 6)
+                else:
+                    # Show load button
+                    if st.button(f"Load Prana/Sub-Prana for {lord} ({duration_str(end - start, level)})", key=f"load_btn_{path_str}"):
+                        st.session_state.deeper_loaded[path_str] = True
+                        st.rerun()
+                    st.caption("Click to load detailed sub-periods (Prana & Sub-Prana).")
+            elif subs and nl:
+                render_period_tree(subs, nl, this_path, full_current_path, now, max_depth)
+
+def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, tree_max_depth):  
     # parse time
     try:
         hour, minute = map(int, time_str.split(':'))
@@ -230,12 +281,12 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, tree_max_depth)
                              ', '.join(asp) if asp else 'None', lord, f"House {lord_house}" if lord_house != 'N/A' else 'N/A'])
     df_house_status = pd.DataFrame(house_status, columns=['House','Planets','Aspects from','Lord','Lord in'])
 
-    # dasa tree (capped at tree_max_depth for fast load)
+    # dasa tree (always to 4 for base, deeper lazy)
     moon_lon = rounded_lon['moon']
     idx, bal = generate_vimshottari_dasa(moon_lon)
     full_first = years[idx]; passed = full_first - bal
     dasa_start = utc_dt - timedelta(days=passed*365.25)
-    dasa = generate_periods(dasa_start, idx, 120, 'dasa', tree_max_depth)
+    dasa = generate_periods(dasa_start, idx, 120, 'dasa', 4)
     dasa_filtered = filter_from_birth(dasa, utc_dt)
 
     return {
@@ -244,7 +295,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, tree_max_depth)
         'lagna_sid': rounded_lagna, 'nav_lagna': nav_lagna, 'lagna_sign': lagna_sign,
         'nav_lagna_sign': get_sign(nav_lagna), 'moon_rasi': get_sign(moon_lon),
         'moon_nakshatra': get_nakshatra_details(moon_lon)[0], 'moon_pada': get_nakshatra_details(moon_lon)[1],
-        'tree_max_depth': tree_max_depth, 'utc_dt': utc_dt,
+        'utc_dt': utc_dt,
         'house_to_planets_rasi': house_planets_rasi, 'house_to_planets_nav': house_planets_nav,
         'natal_moon_lon': moon_lon, 'tz_offset': tz_offset
     }
@@ -361,14 +412,12 @@ else:
             lat, lon = 13.08, 80.27
         st.info("Using default location: Chennai, India")
 
-# Updated UI for depths (default to Sukshma)
+# Tree depth up to Sukshma
 tree_depth_options = {
     1: 'Dasa only', 2: 'Dasa + Bhukti', 3: 'Dasa + Bhukti + Anthara', 4: 'Dasa + Bhukti + Anthara + Sukshma'
 }
 selected_tree_depth_str = st.selectbox("Tree Depth", list(tree_depth_options.values()), index=3)
 tree_max_depth = [k for k,v in tree_depth_options.items() if v == selected_tree_depth_str][0]
-
-deeper_enabled = st.checkbox("Enable Prana/Sub-Prana for current Sukshma branch (loads on demand)")
 
 if st.button("Generate Chart", use_container_width=True):
     if not name:
@@ -379,6 +428,8 @@ if st.button("Generate Chart", use_container_width=True):
         try:
             with st.spinner("Calculating chart..."):
                 st.session_state.chart_data = compute_chart(name, birth_date, birth_time, lat, lon, tz_offset, tree_max_depth)
+                if 'deeper_loaded' in st.session_state:
+                    del st.session_state.deeper_loaded  # Reset on new chart
             st.success("Chart generated successfully!")
             st.rerun()
         except ValueError as e:
@@ -473,15 +524,22 @@ if st.session_state.chart_data:
     st.dataframe(df_transit_house, hide_index=True, use_container_width=True)
     st.caption(f"Based on transits as of {local_now.strftime('%Y-%m-%d %H:%M')} local time")
 
-    # Vimshottari Tree (now fast, with integrated deeper)
-    current_tree_path = find_current_path(cd['dasa_periods_filtered'], local_now, 'dasa', [])
-    tree_title = f"Vimshottari Dasa Tree (up to {selected_tree_depth_str})"
-    if deeper_enabled:
-        tree_title += " with Prana/Sub-Prana for current branch"
-    tree_title += f" — Current as of {local_now.strftime('%Y-%m-%d %H:%M')} local time"
+    # Vimshottari Tree with lazy deeper
+    full_current_path = get_current_dasa_path(local_now, cd['utc_dt'], cd['natal_moon_lon'], 6, full_info=False)
+    tree_title = f"Vimshottari Dasa Tree (up to {selected_tree_depth_str}, deeper on demand) — Current as of {local_now.strftime('%Y-%m-%d %H:%M')} local time"
     st.subheader(tree_title)
-    render_period_tree(cd['dasa_periods_filtered'], 'dasa', current_tree_path, local_now, cd['tree_max_depth'], deeper_enabled)
-    st.info("Tree capped at selected depth for speed. Expand to view sub-periods. Deeper periods load only for the current active Sukshma branch.")
+
+    # Auto-load current deeper if needed
+    if len(full_current_path) > 4:  # Beyond Sukshma
+        suk_prefix = full_current_path[:4]  # dasa, bhukti, anthara, sukshma
+        suk_path_str = '_'.join([f"{pl}_{sl}" for pl, sl in suk_prefix])
+        if 'deeper_loaded' not in st.session_state or suk_path_str not in st.session_state.deeper_loaded:
+            st.session_state.deeper_loaded = st.session_state.get('deeper_loaded', {})
+            st.session_state.deeper_loaded[suk_path_str] = True
+            st.rerun()  # Re-run to load
+
+    render_period_tree(cd['dasa_periods_filtered'], 'dasa', [], full_current_path, local_now, tree_max_depth)
+    st.info("Tree loads up to Sukshma for speed. Click 'Load Prana/Sub-Prana' buttons to expand deeper branches individually. Current branch auto-loads if deeper active.")
 else:
     st.info("Enter details above and click 'Generate Chart' to begin. Note: For accurate planetary positions, install jplephem: pip install jplephem")
 
