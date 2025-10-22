@@ -255,7 +255,7 @@ st.markdown("""
     .summary-item { font-size: 1.05rem; margin: 0.35rem 0; color: #125336; }
 </style>
 """, unsafe_allow_html=True)
-st.title("Sivapathy Astrology Data Generator")
+st.title("Sivapathy Astrology Data Generator (South Indian)")
 
 if 'chart_data' not in st.session_state: st.session_state.chart_data = None
 if 'search_results' not in st.session_state: st.session_state.search_results = []
