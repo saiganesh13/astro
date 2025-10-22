@@ -136,10 +136,10 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     rows = []
     asc_deg = lagna_sid % 360; asc_sign = get_sign(asc_deg)
     a_nak, a_pada, a_ld, a_sl = get_nakshatra_details(asc_deg)
-    rows.append(['Asc', f"{asc_deg:.2f}", asc_sign, a_nak, a_pada, f"{a_ld}/{a_sl}"])
+    rows.append(['Asc', f"{round(asc_deg)}", asc_sign, a_nak, a_pada, f"{a_ld}/{a_sl}"])
     for p in ['sun','moon','mars','mercury','jupiter','venus','saturn','rahu','ketu']:
         L = lon_sid[p]; sign = get_sign(L); nak, pada, ld, sl = get_nakshatra_details(L)
-        rows.append([p.capitalize(), f"{L:.2f}", sign, nak, pada, f"{ld}/{sl}"])
+        rows.append([p.capitalize(), f"{round(L)}", sign, nak, pada, f"{ld}/{sl}"])
     df_planets = pd.DataFrame(rows, columns=['Planet','Deg','Sign','Nakshatra','Pada','Ld/SL'])
 
     # rasi houses
@@ -357,7 +357,7 @@ if st.session_state.chart_data:
     <div class="summary-box">
         <h3>Chart Summary</h3>
         <div class="summary-item"><strong>Name:</strong> {cd['name']}</div>
-        <div class="summary-item"><strong>Lagna:</strong> {cd['lagna_sign']} ({cd['lagna_sid']:.2f}°)</div>
+        <div class="summary-item"><strong>Lagna:</strong> {cd['lagna_sign']} ({round(cd['lagna_sid'])}°)</div>
         <div class="summary-item"><strong>Rasi (Moon Sign):</strong> {cd['moon_rasi']}</div>
         <div class="summary-item"><strong>Nakshatra:</strong> {cd['moon_nakshatra']} (Pada {cd['moon_pada']})</div>
     </div>
