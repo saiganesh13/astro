@@ -12,6 +12,10 @@ import matplotlib.patches as patches
 from matplotlib.patches import FancyBboxPatch
 import io
 
+# NEW: for timezone handling of "current city"
+from timezonefinder import TimezoneFinder
+import pytz
+
 # ---- Matplotlib defaults (crisp + thin) ----
 plt.rcParams.update({"figure.dpi": 300, "savefig.dpi": 300, "lines.linewidth": 0.28})
 
@@ -207,10 +211,10 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
 
     # tuned layout
     box_w, box_h, spacing, pad = 0.46, 0.46, 0.52, 0.02
-    top_pad_extra = 0.020   # EXTRA space above the first planet line (increased)
-    line_h_min    = 0.042   # taller minimum step for breathing room
+    top_pad_extra = 0.020
+    line_h_min    = 0.042
     line_h_max    = 0.058
-    planet_font   = 2.45    # small to support larger spacing
+    planet_font   = 2.45
 
     for sign,(gx,gy) in sign_positions.items():
         h = house_for_sign[sign]
@@ -221,11 +225,9 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
                                     boxstyle="round,pad=0.004",
                                     ec="black", fc="#F5F5F5",
                                     alpha=0.92, linewidth=0.32))
-        # tiny sign label left-top
         ax.text(x+pad, y+pad, sign[:3], ha='left', va='top', fontsize=2.7)
 
         if planets:
-            # reduce usable height to force looser stacking; add extra top margin
             avail = box_h - (pad + 0.064)
             n = len(planets)
             line_h = min(line_h_max, max(line_h_min, avail / max(1, n)))
@@ -265,6 +267,43 @@ def get_geolocator():
     geolocator = Nominatim(user_agent="vedic_astro_app")
     return RateLimiter(geolocator.geocode, min_delay_seconds=1)
 geocode = get_geolocator()
+
+# NEW: timezone tools
+_tf = TimezoneFinder()
+def tz_for_latlon(lat: float, lon: float):
+    tzname = _tf.timezone_at(lng=lon, lat=lat)
+    if not tzname:
+        return pytz.UTC
+    return pytz.timezone(tzname)
+
+# NEW: depth mapping + tree walkers
+_DEPTH_NAME_TO_INT = {
+    'Dasa': 1, 'Bhukti': 2, 'Anthara': 3, 'Sukshma': 4, 'Prana': 5, 'Sub-Prana': 6
+}
+
+def find_active_path_to_depth(periods, when_utc, target_depth, cur_depth=1):
+    """
+    Return the path [ (lord,start,end), ... ] from Dasa down to `target_depth`
+    that contains `when_utc`. Datetimes in `periods` are naive UTC.
+    """
+    for lord, start, end, subs in periods:
+        if start <= when_utc < end:
+            if cur_depth == target_depth or not subs:
+                return [(lord, start, end)]
+            sub_path = find_active_path_to_depth(subs, when_utc, target_depth, cur_depth+1)
+            return [(lord, start, end)] + (sub_path or [])
+    return None
+
+def collect_periods_at_depth(periods, target_depth, cur_depth=1, acc=None):
+    """Flatten the tree and collect periods at a specific depth, in order."""
+    if acc is None:
+        acc = []
+    for lord, start, end, subs in periods:
+        if cur_depth == target_depth or not subs:
+            acc.append((lord, start, end))
+        else:
+            collect_periods_at_depth(subs, target_depth, cur_depth+1, acc)
+    return acc
 
 # Inputs
 st.subheader("Birth Details")
@@ -384,9 +423,9 @@ if st.session_state.chart_data:
                  for lord, s, e, _ in cd['dasa_periods_filtered']]
     st.dataframe(pd.DataFrame(dasa_rows), hide_index=True, use_container_width=True)
 
-    max_depth = cd['max_depth']
+    max_depth_sel = cd['max_depth']
     dp = cd['dasa_periods_filtered']
-    if max_depth >= 2:
+    if max_depth_sel >= 2:
         with st.expander("View Bhuktis (Sub-periods)", expanded=False):
             if dp:
                 d_opt = [f"{p[0]} ({p[1].strftime('%Y-%m-%d')} - {p[2].strftime('%Y-%m-%d')})" for p in dp]
@@ -396,7 +435,7 @@ if st.session_state.chart_data:
                     [{'Planet': l, 'Start': s.strftime('%Y-%m-%d'), 'End': e.strftime('%Y-%m-%d'),
                       'Duration': duration_str(e-s,'bhukti')} for l,s,e,_ in bhuktis]),
                     hide_index=True, use_container_width=True)
-                if max_depth >= 3:
+                if max_depth_sel >= 3:
                     with st.expander("View Antharas", expanded=False):
                         if bhuktis:
                             b_opt = [f"{p[0]} ({p[1].strftime('%Y-%m-%d')} - {p[2].strftime('%Y-%m-%d')})" for p in bhuktis]
@@ -407,7 +446,7 @@ if st.session_state.chart_data:
                                   'End': e.strftime('%Y-%m-%d %H:%M'),
                                   'Duration': duration_str(e-s,'anthara')} for l,s,e,_ in antharas]),
                                 hide_index=True, use_container_width=True)
-                            if max_depth >= 4:
+                            if max_depth_sel >= 4:
                                 with st.expander("View Sukshmas", expanded=False):
                                     if antharas:
                                         a_opt = [f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" for p in antharas]
@@ -418,7 +457,7 @@ if st.session_state.chart_data:
                                               'End': e.strftime('%Y-%m-%d %H:%M'),
                                               'Duration': duration_str(e-s,'sukshma')} for l,s,e,_ in sukshmas]),
                                             hide_index=True, use_container_width=True)
-                                        if max_depth >= 5:
+                                        if max_depth_sel >= 5:
                                             with st.expander("View Pranas", expanded=False):
                                                 if sukshmas:
                                                     s_opt = [f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" for p in sukshmas]
@@ -429,7 +468,7 @@ if st.session_state.chart_data:
                                                           'End': e.strftime('%Y-%m-%d %H:%M'),
                                                           'Duration': duration_str(e-s,'prana')} for l,s,e,_ in pranas]),
                                                         hide_index=True, use_container_width=True)
-                                                    if max_depth >= 6:
+                                                    if max_depth_sel >= 6:
                                                         with st.expander("View Sub-Pranas", expanded=False):
                                                             if pranas:
                                                                 p_opt = [f"{p[0]} ({p[1].strftime('%Y-%m-%d %H:%M')} - {p[2].strftime('%Y-%m-%d %H:%M')})" for p in pranas]
@@ -441,6 +480,94 @@ if st.session_state.chart_data:
                                                                       'Duration': duration_str(e-s,'sub_prana')} for l,s,e,_ in subp]),
                                                                     hide_index=True, use_container_width=True)
     st.info("Note: Periods are filtered from birth time; durations are approximate.")
+
+    # =========================
+    # NEW SECTION: Current City → Live Micro-Periods
+    # =========================
+    st.subheader("Current City → Live Micro-Periods")
+
+    cc1, cc2 = st.columns([2,1])
+    with cc1:
+        current_city_query = st.text_input(
+            "Enter your CURRENT city (for local clock display)",
+            placeholder="e.g., San Jose, CA or Chennai"
+        )
+    with cc2:
+        depth_choice = st.selectbox(
+            "Depth to inspect",
+            ["Sukshma", "Prana", "Sub-Prana"],
+            index=0
+        )
+    target_depth = _DEPTH_NAME_TO_INT[depth_choice]
+
+    if st.button("Show current micro-periods", use_container_width=True):
+        if not current_city_query or len(current_city_query) < 2:
+            st.error("Please enter a valid current city.")
+        else:
+            try:
+                cur_locs = geocode(current_city_query, exactly_one=False, limit=1)
+                if not cur_locs:
+                    st.error("Could not find that city. Try a more specific name.")
+                else:
+                    cur = cur_locs[0]
+                    cur_lat, cur_lon = cur.latitude, cur.longitude
+                    tz = tz_for_latlon(cur_lat, cur_lon)
+
+                    # "Now" in that city, then convert to UTC naive
+                    now_local = datetime.now(tz)
+                    now_utc_naive = now_local.astimezone(pytz.UTC).replace(tzinfo=None)
+
+                    dp = cd['dasa_periods_filtered']
+
+                    # Active stack Dasa→…→target_depth
+                    active_path = find_active_path_to_depth(dp, now_utc_naive, target_depth)
+                    flat_at_depth = collect_periods_at_depth(dp, target_depth)
+
+                    # Locate current index at this depth
+                    idx = None
+                    for i, (_, s, e) in enumerate(flat_at_depth):
+                        if s <= now_utc_naive < e:
+                            idx = i
+                            break
+
+                    st.success(f"Detected time zone: {tz.zone} • Local now: {now_local.strftime('%Y-%m-%d %H:%M')}")
+                    if active_path:
+                        st.markdown("**Active stack (Dasa → … → " + depth_choice + ")**")
+                        rows = []
+                        labels = ["Dasa", "Bhukti", "Anthara", "Sukshma", "Prana", "Sub-Prana"]
+                        # choose the correct level name for duration_str
+                        level_key = depth_choice.lower().replace('-','_')
+                        for j, (lord, s, e) in enumerate(active_path):
+                            rows.append({
+                                "Level": labels[j],
+                                "Lord": lord,
+                                "Start (local)": s.replace(tzinfo=pytz.UTC).astimezone(tz).strftime('%Y-%m-%d %H:%M'),
+                                "End (local)":   e.replace(tzinfo=pytz.UTC).astimezone(tz).strftime('%Y-%m-%d %H:%M'),
+                                "Duration": duration_str(e - s, level=level_key if labels[j].lower()==depth_choice.lower() else 'dasa')
+                            })
+                        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+                    else:
+                        st.info("Could not locate the active path at this depth. (Edge case near a boundary?)")
+
+                    # Show current + next 5 at selected depth
+                    if idx is not None:
+                        nxt = flat_at_depth[idx: idx+6]
+                        st.markdown(f"**Current and next {max(0, len(nxt)-1)} {depth_choice} periods (local time)**")
+                        level_key = depth_choice.lower().replace('-','_')
+                        tbl = []
+                        for lord, s, e in nxt:
+                            tbl.append({
+                                "Lord": lord,
+                                "Start (local)": s.replace(tzinfo=pytz.UTC).astimezone(tz).strftime('%Y-%m-%d %H:%M'),
+                                "End (local)":   e.replace(tzinfo=pytz.UTC).astimezone(tz).strftime('%Y-%m-%d %H:%M'),
+                                "Duration": duration_str(e - s, level=level_key)
+                            })
+                        st.dataframe(pd.DataFrame(tbl), hide_index=True, use_container_width=True)
+
+                    st.caption("Note: Micro-period boundaries are absolute (UTC). We display them in your city’s local clock.")
+            except Exception as e:
+                st.error(f"Could not compute local micro-periods: {e}")
+
 else:
     st.info("Enter details above and click 'Generate Chart' to begin")
 
