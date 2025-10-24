@@ -4,3 +4,5 @@ geopy
 astropy
 matplotlib
 jplephem
+timezonefinder
+pytz
