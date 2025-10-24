@@ -8,11 +8,10 @@ import pandas as pd
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 from matplotlib.patches import FancyBboxPatch
 import io
 
-# NEW: for timezone handling of "current city"
+# NEW: timezone detection for "Current City"
 from timezonefinder import TimezoneFinder
 import pytz
 
@@ -159,7 +158,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                              ', '.join(sorted(house_planets_nav[h])) if house_planets_nav[h] else 'Empty']
                             for h in range(1,13)], columns=['House','Sign','Planets'])
 
-    # aspects table (unchanged logic)
+    # aspects table
     lagna_sign = get_sign(lagna_sid)
     aspects_dict = {'Sun':[7],'Moon':[7],'Mars':[4,7,8],'Mercury':[7],'Jupiter':[5,7,9],'Venus':[7],'Saturn':[3,7,10]}
     planet_to_house = {p.capitalize(): get_house(lon_sid[p], lagna_sid) for p in lon_sid}
@@ -200,7 +199,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         'house_to_planets_rasi': house_planets_rasi, 'house_to_planets_nav': house_planets_nav
     }
 
-# ---- South Indian plotter ONLY (extra top padding) ----
+# ---- South Indian plotter ----
 def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
     sign_positions = {'Pisces':(0,3),'Aries':(1,3),'Taurus':(2,3),'Gemini':(3,3),
                       'Cancer':(3,2),'Leo':(3,1),'Virgo':(3,0),
@@ -209,12 +208,10 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
     lagna_idx = sign_names.index(lagna_sign)
     house_for_sign = {s: ((i - lagna_idx) % 12) + 1 for i, s in enumerate(sign_names)}
 
-    # tuned layout
     box_w, box_h, spacing, pad = 0.46, 0.46, 0.52, 0.02
     top_pad_extra = 0.020
-    line_h_min    = 0.042
-    line_h_max    = 0.058
-    planet_font   = 2.45
+    line_h_min, line_h_max = 0.042, 0.058
+    planet_font = 2.45
 
     for sign,(gx,gy) in sign_positions.items():
         h = house_for_sign[sign]
@@ -268,7 +265,7 @@ def get_geolocator():
     return RateLimiter(geolocator.geocode, min_delay_seconds=1)
 geocode = get_geolocator()
 
-# NEW: timezone tools
+# === Timezone tools for Current City ===
 _tf = TimezoneFinder()
 def tz_for_latlon(lat: float, lon: float):
     tzname = _tf.timezone_at(lng=lon, lat=lat)
@@ -276,16 +273,10 @@ def tz_for_latlon(lat: float, lon: float):
         return pytz.UTC
     return pytz.timezone(tzname)
 
-# NEW: depth mapping + tree walkers
-_DEPTH_NAME_TO_INT = {
-    'Dasa': 1, 'Bhukti': 2, 'Anthara': 3, 'Sukshma': 4, 'Prana': 5, 'Sub-Prana': 6
-}
+# === Tree walkers for micro-depths ===
+_DEPTH_NAME_TO_INT = {'Dasa':1, 'Bhukti':2, 'Anthara':3, 'Sukshma':4, 'Prana':5, 'Sub-Prana':6}
 
 def find_active_path_to_depth(periods, when_utc, target_depth, cur_depth=1):
-    """
-    Return the path [ (lord,start,end), ... ] from Dasa down to `target_depth`
-    that contains `when_utc`. Datetimes in `periods` are naive UTC.
-    """
     for lord, start, end, subs in periods:
         if start <= when_utc < end:
             if cur_depth == target_depth or not subs:
@@ -295,9 +286,7 @@ def find_active_path_to_depth(periods, when_utc, target_depth, cur_depth=1):
     return None
 
 def collect_periods_at_depth(periods, target_depth, cur_depth=1, acc=None):
-    """Flatten the tree and collect periods at a specific depth, in order."""
-    if acc is None:
-        acc = []
+    if acc is None: acc = []
     for lord, start, end, subs in periods:
         if cur_depth == target_depth or not subs:
             acc.append((lord, start, end))
@@ -305,7 +294,9 @@ def collect_periods_at_depth(periods, target_depth, cur_depth=1, acc=None):
             collect_periods_at_depth(subs, target_depth, cur_depth+1, acc)
     return acc
 
-# Inputs
+# =========================
+# Birth Details (Birth City separate)
+# =========================
 st.subheader("Birth Details")
 name = st.text_input("Name", placeholder="Enter full name")
 c1, c2, c3 = st.columns(3)
@@ -315,19 +306,20 @@ with c1:
 with c2:
     birth_time = st.text_input("Birth Time (HH:MM in 24-hour format)", placeholder="14:30")
 with c3:
-    tz_offset = st.number_input("Timezone offset (hrs)", value=5.5, step=0.5,
-                                help="Offset from UTC (e.g., IST = 5.5)")
+    tz_offset = st.number_input("Timezone offset at birth (hrs)", value=5.5, step=0.5,
+                                help="Offset from UTC at birth (e.g., IST = 5.5)")
 
-use_custom_coords = st.checkbox("Custom latitude and longitude?")
+use_custom_coords = st.checkbox("Custom birth latitude and longitude?")
 if use_custom_coords:
     clat, clon = st.columns(2)
-    with clat: lat = st.number_input("Latitude", value=13.08, format="%.4f")
-    with clon: lon = st.number_input("Longitude", value=80.27, format="%.4f")
+    with clat: lat = st.number_input("Birth Latitude", value=13.08, format="%.4f")
+    with clon: lon = st.number_input("Birth Longitude", value=80.27, format="%.4f")
 else:
-    city_query = st.text_input("Search City", placeholder="Start typing city name...", key="city_input")
-    if city_query and len(city_query) >= 2:
+    birth_city_query = st.text_input("Birth City (for birth coordinates)",
+                                     placeholder="Start typing birth city name...", key="birth_city_input")
+    if birth_city_query and len(birth_city_query) >= 2:
         try:
-            locations = geocode(city_query, exactly_one=False, limit=5)
+            locations = geocode(birth_city_query, exactly_one=False, limit=5)
             st.session_state.search_results = [{'display': loc.address, 'lat': loc.latitude, 'lon': loc.longitude, 'address': loc.address} for loc in (locations or [])]
         except:
             st.session_state.search_results = []
@@ -335,24 +327,24 @@ else:
         st.session_state.search_results = []
     if st.session_state.search_results:
         opts = [r['display'] for r in st.session_state.search_results]
-        sel = st.selectbox("Select location", options=opts, key="location_selector")
+        sel = st.selectbox("Select birth location", options=opts, key="birth_location_selector")
         i = opts.index(sel)
         lat = st.session_state.search_results[i]['lat']; lon = st.session_state.search_results[i]['lon']
-        st.success(f"Selected: {st.session_state.search_results[i]['address']} (Lat: {lat:.2f}, Lon: {lon:.2f})")
+        st.success(f"Selected birth place: {st.session_state.search_results[i]['address']} (Lat: {lat:.2f}, Lon: {lon:.2f})")
     else:
-        city_key = (city_query or "").title()
+        city_key = (birth_city_query or "").title()
         if city_key in cities_fallback:
             lat = cities_fallback[city_key]['lat']; lon = cities_fallback[city_key]['lon']
         else:
             lat, lon = 13.08, 80.27
-        st.info("Using default location: Chennai, India")
+        st.info("Using default birth location: Chennai, India")
 
 max_depth_options = {
     1:'Dasa only',2:'Dasa + Bhukti',3:'Dasa + Bhukti + Anthara',
     4:'Dasa + Bhukti + Anthara + Sukshma',5:'Dasa + Bhukti + Anthara + Sukshma + Prana',
     6:'Dasa + Bhukti + Anthara + Sukshma + Prana + Sub-Prana'
 }
-selected_depth_str = st.selectbox("Period Depth", list(max_depth_options.values()), index=2)
+selected_depth_str = st.selectbox("Generate up to (depth)", list(max_depth_options.values()), index=2)
 max_depth = [k for k,v in max_depth_options.items() if v == selected_depth_str][0]
 
 if st.button("Generate Chart", use_container_width=True):
@@ -371,17 +363,14 @@ if st.button("Generate Chart", use_container_width=True):
         except Exception as e:
             st.error(f"Error generating chart: {e}")
 
-# render helpers
-def show_svg(fig, width_px=240):
-    buf = io.BytesIO()
-    fig.savefig(buf, format="svg", bbox_inches="tight", pad_inches=0.02)
-    st.image(buf.getvalue(), width=width_px)
-
+# ---- render helpers
 def show_png(fig):
     fig.tight_layout(pad=0.10)
     st.pyplot(fig, use_container_width=False, dpi=300)
 
-# Output
+# =========================
+# Outputs
+# =========================
 if st.session_state.chart_data:
     cd = st.session_state.chart_data
     st.markdown("---")
@@ -398,25 +387,20 @@ if st.session_state.chart_data:
     st.subheader("Planetary Positions")
     st.dataframe(cd['df_planets'], hide_index=True, use_container_width=True)
 
-    # South Indian charts side-by-side
+    # Rasi & Navamsa (South Indian)
     st.subheader("Rasi (D1) & Navamsa (D9) — South Indian")
     col1, col2 = st.columns(2, gap="small")
     size = (1.8, 1.8)
-
-    with col1:
-        fig, ax = plt.subplots(figsize=size)
-        plot_south_indian_style(ax, cd['house_to_planets_rasi'], cd['lagna_sign'], 'Rasi Chart (South Indian)')
-        show_png(fig)
-
-    with col2:
-        fig, ax = plt.subplots(figsize=size)
-        plot_south_indian_style(ax, cd['house_to_planets_nav'], cd['nav_lagna_sign'], 'Navamsa Chart (South Indian)')
-        show_png(fig)
+    fig1, ax1 = plt.subplots(figsize=size)
+    plot_south_indian_style(ax1, cd['house_to_planets_rasi'], cd['lagna_sign'], 'Rasi Chart (South Indian)')
+    show_png(fig1)
+    fig2, ax2 = plt.subplots(figsize=size)
+    plot_south_indian_style(ax2, cd['house_to_planets_nav'], cd['nav_lagna_sign'], 'Navamsa Chart (South Indian)')
+    show_png(fig2)
 
     st.subheader("House Analysis")
     st.dataframe(cd['df_house_status'], hide_index=True, use_container_width=True)
 
-    # Vimshottari with full nested expanders
     st.subheader(f"Vimshottari Dasa ({cd['selected_depth']})")
     dasa_rows = [{'Planet': lord, 'Start': s.strftime('%Y-%m-%d'),
                   'End': e.strftime('%Y-%m-%d'), 'Duration': duration_str(e-s,'dasa')}
@@ -482,15 +466,15 @@ if st.session_state.chart_data:
     st.info("Note: Periods are filtered from birth time; durations are approximate.")
 
     # =========================
-    # NEW SECTION: Current City → Live Micro-Periods
+    # SEPARATE INPUT: Current City → Live Micro-Periods
     # =========================
     st.subheader("Current City → Live Micro-Periods")
-
     cc1, cc2 = st.columns([2,1])
     with cc1:
         current_city_query = st.text_input(
             "Enter your CURRENT city (for local clock display)",
-            placeholder="e.g., San Jose, CA or Chennai"
+            placeholder="e.g., San Jose, CA or Chennai",
+            key="current_city_input"
         )
     with cc2:
         depth_choice = st.selectbox(
@@ -513,7 +497,7 @@ if st.session_state.chart_data:
                     cur_lat, cur_lon = cur.latitude, cur.longitude
                     tz = tz_for_latlon(cur_lat, cur_lon)
 
-                    # "Now" in that city, then convert to UTC naive
+                    # "Now" in that city's timezone, then convert to naive UTC for comparisons
                     now_local = datetime.now(tz)
                     now_utc_naive = now_local.astimezone(pytz.UTC).replace(tzinfo=None)
 
@@ -535,7 +519,6 @@ if st.session_state.chart_data:
                         st.markdown("**Active stack (Dasa → … → " + depth_choice + ")**")
                         rows = []
                         labels = ["Dasa", "Bhukti", "Anthara", "Sukshma", "Prana", "Sub-Prana"]
-                        # choose the correct level name for duration_str
                         level_key = depth_choice.lower().replace('-','_')
                         for j, (lord, s, e) in enumerate(active_path):
                             rows.append({
@@ -569,7 +552,7 @@ if st.session_state.chart_data:
                 st.error(f"Could not compute local micro-periods: {e}")
 
 else:
-    st.info("Enter details above and click 'Generate Chart' to begin")
+    st.info("Enter birth details above and click 'Generate Chart' to begin")
 
 st.markdown("---")
 st.caption("Sivapathy Astrology Data Generator")
