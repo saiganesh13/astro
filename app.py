@@ -10,14 +10,11 @@ from geopy.extra.rate_limiter import RateLimiter
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch
 import io
-
 # NEW: timezone detection for "Current City"
 from timezonefinder import TimezoneFinder
 import pytz
-
 # ---- Matplotlib defaults (crisp + thin) ----
 plt.rcParams.update({"figure.dpi": 300, "savefig.dpi": 300, "lines.linewidth": 0.28})
-
 # ---- Constants ----
 cities_fallback = {
     'Chennai': {'lat': 13.08, 'lon': 80.27}, 'Mumbai': {'lat': 19.07, 'lon': 72.88},
@@ -33,20 +30,16 @@ nak_names = ['Ashwini','Bharani','Krittika','Rohini','Mrigashira','Ardra','Punar
              'Purva Bhadrapada','Uttara Bhadrapada','Revati']
 years = [7, 20, 6, 10, 7, 18, 16, 19, 17] * 3
 sign_lords = ['Mars','Venus','Mercury','Moon','Sun','Mercury','Venus','Mars','Jupiter','Saturn','Saturn','Jupiter']
-
 # ---- Astro helpers ----
 def get_lahiri_ayanamsa(year):
     base = 23.853; rate = 50.2388/3600.0
     return (base + (year - 2000) * rate) % 360
-
 def get_obliquity(d):
     T = d/36525.0
     return ((((-4.34e-8*T - 5.76e-7)*T + 0.0020034)*T - 1.831e-4)*T - 46.836769)*T/3600 + 23.4392794444444
-
 def get_gmst(d):
     T = d/36525.0
     return (67310.54841 + (3155760000 + 8640184.812866)*T + 0.093104*T**2 - 6.2e-6*T**3)/3600 % 24
-
 def get_ascendant(jd, lat, lon):
     d = jd - 2451545.0
     oer = radians(get_obliquity(d))
@@ -55,20 +48,17 @@ def get_ascendant(jd, lat, lon):
     sin_asc = cos(lstr)
     cos_asc = -(sin(lstr)*cos(oer) + tan(radians(lat))*sin(oer))
     return degrees(atan2(sin_asc, cos_asc)) % 360
-
 def get_sidereal_lon(tlon, ayan): return (tlon - ayan) % 360
 def get_sign(lon): return sign_names[int(lon/30)]
 def get_house(lon, lagna_lon): return (int(lon/30) - int(lagna_lon/30)) % 12 + 1
-
 def get_nakshatra_details(lon):
     dnak = 360/27
     idx = int(lon // dnak) % 27
     pos = lon % dnak
     pada = int((pos/(dnak/4))) + 1
     star = idx % 9
-    sub  = (star + int((pos/dnak)*9)) % 9
+    sub = (star + int((pos/dnak)*9)) % 9
     return nak_names[idx], pada, lords_short[star], lords_short[sub]
-
 def generate_vimshottari_dasa(moon_lon):
     nak = int(moon_lon * 27 / 360)
     lord_idx = nak % 9
@@ -76,7 +66,6 @@ def generate_vimshottari_dasa(moon_lon):
     pos_in_nak = moon_lon % (360/27)
     fraction = pos_in_nak / (360/27)
     return lord_idx, y * (1 - fraction)
-
 def generate_periods(start_date, lord_idx, total_years, level='dasa', max_depth=3):
     periods, remaining, i, current = [], total_years, lord_idx, start_date
     depth_map = {'dasa':0,'bhukti':1,'anthara':2,'sukshma':3,'prana':4,'sub_prana':5}
@@ -90,14 +79,12 @@ def generate_periods(start_date, lord_idx, total_years, level='dasa', max_depth=
         periods.append((lord, current, end, subs))
         remaining -= y; current = end; i = (i+1) % 9
     return periods
-
 def filter_from_birth(periods, birth_dt):
     out = []
     for lord, start, end, sub in periods:
         if end > birth_dt:
             out.append((lord, max(start, birth_dt), end, filter_from_birth(sub, birth_dt) if sub else []))
     return out
-
 def duration_str(delta, level='dasa'):
     days = delta.total_seconds()/86400
     if days < 1 and level in ['sukshma','prana','sub_prana']:
@@ -106,7 +93,26 @@ def duration_str(delta, level='dasa'):
     y = int(days/365.25); rem = days % 365.25
     m = int(rem/30.4375); d = int(rem % 30.4375)
     return "Less than 1 day" if y+m+d==0 else f"{y}y {m}m {d}d"
-
+def calculate_dig_bala(planet, lon, lagna):
+    east = lagna % 360
+    north = (lagna + 90) % 360
+    west = (lagna + 180) % 360
+    south = (lagna + 270) % 360
+    if planet.lower() in ['sun', 'mars']:
+        D = north
+    elif planet.lower() in ['moon', 'venus']:
+        D = south
+    elif planet.lower() in ['mercury', 'jupiter', 'ketu']:
+        D = west
+    elif planet.lower() in ['saturn', 'rahu']:
+        D = east
+    else:
+        return None
+    diff = abs(lon - D)
+    ang_dist = min(diff, 360 - diff)
+    virupas = ang_dist / 3
+    percentage = (virupas / 60) * 100
+    return round(percentage, 2)
 def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     # parse time
     try:
@@ -117,7 +123,6 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     local_dt = datetime.combine(date_obj, datetime.min.time().replace(hour=hour, minute=minute))
     utc_dt = local_dt - timedelta(hours=tz_offset)
     t = Time(utc_dt); jd = t.jd; ayan = get_lahiri_ayanamsa(utc_dt.year)
-
     with solar_system_ephemeris.set('builtin'):
         lon_trop = {}
         for nm in ['sun','moon','mercury','venus','mars','jupiter','saturn']:
@@ -125,20 +130,19 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     d = jd - 2451545.0; T = d/36525.0
     omega = (125.04452 - 1934.136261*T + 0.0020708*T**2 + T**3/450000) % 360
     lon_trop['rahu'] = omega; lon_trop['ketu'] = (omega + 180) % 360
-
     lon_sid = {p: get_sidereal_lon(lon_trop[p], ayan) for p in lon_trop}
     lagna_sid = get_sidereal_lon(get_ascendant(jd, lat, lon), ayan)
-
     # planets table
     rows = []
     asc_deg = lagna_sid % 360; asc_sign = get_sign(asc_deg)
     a_nak, a_pada, a_ld, a_sl = get_nakshatra_details(asc_deg)
-    rows.append(['Asc', f"{asc_deg:.2f}", asc_sign, a_nak, a_pada, f"{a_ld}/{a_sl}"])
+    dig_bala_asc = calculate_dig_bala('asc', asc_deg, lagna_sid)
+    rows.append(['Asc', f"{asc_deg:.2f}", asc_sign, a_nak, a_pada, f"{a_ld}/{a_sl}", f"{dig_bala_asc}%" if dig_bala_asc is not None else ''])
     for p in ['sun','moon','mars','mercury','jupiter','venus','saturn','rahu','ketu']:
         L = lon_sid[p]; sign = get_sign(L); nak, pada, ld, sl = get_nakshatra_details(L)
-        rows.append([p.capitalize(), f"{L:.2f}", sign, nak, pada, f"{ld}/{sl}"])
-    df_planets = pd.DataFrame(rows, columns=['Planet','Deg','Sign','Nakshatra','Pada','Ld/SL'])
-
+        dig_bala = calculate_dig_bala(p, L, lagna_sid)
+        rows.append([p.capitalize(), f"{L:.2f}", sign, nak, pada, f"{ld}/{sl}", f"{dig_bala}%" if dig_bala is not None else ''])
+    df_planets = pd.DataFrame(rows, columns=['Planet','Deg','Sign','Nakshatra','Pada','Ld/SL','Dig Bala (%)'])
     # rasi houses
     house_planets_rasi = defaultdict(list); positions = {**lon_sid,'asc':lagna_sid}
     for p,L in positions.items():
@@ -146,7 +150,6 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     df_rasi = pd.DataFrame([[f"House {h}", get_sign((lagna_sid+(h-1)*30)%360),
                              ', '.join(sorted(house_planets_rasi[h])) if house_planets_rasi[h] else 'Empty']
                             for h in range(1,13)], columns=['House','Sign','Planets'])
-
     # navamsa
     nav_lagna = (lagna_sid*9) % 360
     house_planets_nav = defaultdict(list)
@@ -157,7 +160,6 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     df_nav = pd.DataFrame([[f"House {h}", get_sign((nav_lagna+(h-1)*30)%360),
                              ', '.join(sorted(house_planets_nav[h])) if house_planets_nav[h] else 'Empty']
                             for h in range(1,13)], columns=['House','Sign','Planets'])
-
     # aspects table
     lagna_sign = get_sign(lagna_sid)
     aspects_dict = {'Sun':[7],'Moon':[7],'Mars':[4,7,8],'Mercury':[7],'Jupiter':[5,7,9],'Venus':[7],'Saturn':[3,7,10]}
@@ -176,7 +178,6 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                              ', '.join(sorted(house_planets_rasi[h])) if house_planets_rasi[h] else 'Empty',
                              ', '.join(asp) if asp else 'None', lord, f"House {lord_house}"])
     df_house_status = pd.DataFrame(house_status, columns=['House','Planets','Aspects from','Lord','Lord in'])
-
     # dasa tree
     moon_lon = lon_sid['moon']
     idx, bal = generate_vimshottari_dasa(moon_lon)
@@ -184,11 +185,9 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     dasa_start = utc_dt - timedelta(days=passed*365.25)
     dasa = generate_periods(dasa_start, idx, 120, 'dasa', max_depth)
     dasa_filtered = filter_from_birth(dasa, utc_dt)
-
     depth_map = {1:'Dasa only',2:'Dasa + Bhukti',3:'Dasa + Bhukti + Anthara',
                  4:'Dasa + Bhukti + Anthara + Sukshma',5:'Dasa + Bhukti + Anthara + Sukshma + Prana',
                  6:'Dasa + Bhukti + Anthara + Sukshma + Prana + Sub-Prana'}
-
     return {
         'name': name, 'df_planets': df_planets, 'df_rasi': df_rasi, 'df_nav': df_nav,
         'df_house_status': df_house_status, 'dasa_periods_filtered': dasa_filtered,
@@ -198,7 +197,6 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         'selected_depth': depth_map[max_depth], 'utc_dt': utc_dt, 'max_depth': max_depth,
         'house_to_planets_rasi': house_planets_rasi, 'house_to_planets_nav': house_planets_nav
     }
-
 # ---- South Indian plotter ----
 def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
     sign_positions = {'Pisces':(0,3),'Aries':(1,3),'Taurus':(2,3),'Gemini':(3,3),
@@ -207,23 +205,19 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
                       'Capricorn':(0,1),'Aquarius':(0,2)}
     lagna_idx = sign_names.index(lagna_sign)
     house_for_sign = {s: ((i - lagna_idx) % 12) + 1 for i, s in enumerate(sign_names)}
-
     box_w, box_h, spacing, pad = 0.46, 0.46, 0.52, 0.02
     top_pad_extra = 0.020
     line_h_min, line_h_max = 0.042, 0.058
     planet_font = 2.45
-
     for sign,(gx,gy) in sign_positions.items():
         h = house_for_sign[sign]
         planets = sorted(house_to_planets.get(h,[]))
         x = gx*spacing + 0.22; y = (3-gy)*spacing + 0.22
-
         ax.add_patch(FancyBboxPatch((x,y), box_w, box_h,
                                     boxstyle="round,pad=0.004",
                                     ec="black", fc="#F5F5F5",
                                     alpha=0.92, linewidth=0.32))
         ax.text(x+pad, y+pad, sign[:3], ha='left', va='top', fontsize=2.7)
-
         if planets:
             avail = box_h - (pad + 0.064)
             n = len(planets)
@@ -232,11 +226,9 @@ def plot_south_indian_style(ax, house_to_planets, lagna_sign, title):
             for i, p in enumerate(planets):
                 py = start_y + i*line_h
                 ax.text(x + box_w/2, py, p, ha='center', va='top', fontsize=planet_font)
-
     ax.set_xlim(0,3); ax.set_ylim(0,3); ax.set_aspect('equal'); ax.invert_yaxis()
     ax.set_title(title, fontsize=3.6, fontweight='normal')
     ax.axis('off')
-
 # ---- Streamlit UI ----
 st.set_page_config(page_title="Sivapathy Horoscope", layout="wide")
 st.markdown("""
@@ -255,16 +247,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 st.title("Sivapathy Astrology Data Generator")
-
 if 'chart_data' not in st.session_state: st.session_state.chart_data = None
 if 'search_results' not in st.session_state: st.session_state.search_results = []
-
 @st.cache_resource
 def get_geolocator():
     geolocator = Nominatim(user_agent="vedic_astro_app")
     return RateLimiter(geolocator.geocode, min_delay_seconds=1)
 geocode = get_geolocator()
-
 # === Timezone tools for Current City ===
 _tf = TimezoneFinder()
 def tz_for_latlon(lat: float, lon: float):
@@ -272,10 +261,8 @@ def tz_for_latlon(lat: float, lon: float):
     if not tzname:
         return pytz.UTC
     return pytz.timezone(tzname)
-
 # === Tree walkers for micro-depths ===
 _DEPTH_NAME_TO_INT = {'Dasa':1, 'Bhukti':2, 'Anthara':3, 'Sukshma':4, 'Prana':5, 'Sub-Prana':6}
-
 def find_active_path_to_depth(periods, when_utc, target_depth, cur_depth=1):
     for lord, start, end, subs in periods:
         if start <= when_utc < end:
@@ -284,7 +271,6 @@ def find_active_path_to_depth(periods, when_utc, target_depth, cur_depth=1):
             sub_path = find_active_path_to_depth(subs, when_utc, target_depth, cur_depth+1)
             return [(lord, start, end)] + (sub_path or [])
     return None
-
 def collect_periods_at_depth(periods, target_depth, cur_depth=1, acc=None):
     if acc is None: acc = []
     for lord, start, end, subs in periods:
@@ -293,7 +279,6 @@ def collect_periods_at_depth(periods, target_depth, cur_depth=1, acc=None):
         else:
             collect_periods_at_depth(subs, target_depth, cur_depth+1, acc)
     return acc
-
 # =========================
 # Birth Details (Birth City separate)
 # =========================
@@ -308,7 +293,6 @@ with c2:
 with c3:
     tz_offset = st.number_input("Timezone offset at birth (hrs)", value=5.5, step=0.5,
                                 help="Offset from UTC at birth (e.g., IST = 5.5)")
-
 use_custom_coords = st.checkbox("Custom birth latitude and longitude?")
 if use_custom_coords:
     clat, clon = st.columns(2)
@@ -338,7 +322,6 @@ else:
         else:
             lat, lon = 13.08, 80.27
         st.info("Using default birth location: Chennai, India")
-
 max_depth_options = {
     1:'Dasa only',2:'Dasa + Bhukti',3:'Dasa + Bhukti + Anthara',
     4:'Dasa + Bhukti + Anthara + Sukshma',5:'Dasa + Bhukti + Anthara + Sukshma + Prana',
@@ -346,7 +329,6 @@ max_depth_options = {
 }
 selected_depth_str = st.selectbox("Generate up to (depth)", list(max_depth_options.values()), index=2)
 max_depth = [k for k,v in max_depth_options.items() if v == selected_depth_str][0]
-
 if st.button("Generate Chart", use_container_width=True):
     if not name:
         st.error("Please enter a name.")
@@ -362,12 +344,10 @@ if st.button("Generate Chart", use_container_width=True):
             st.error(f"Invalid input: {e}")
         except Exception as e:
             st.error(f"Error generating chart: {e}")
-
 # ---- render helpers
 def show_png(fig):
     fig.tight_layout(pad=0.10)
     st.pyplot(fig, use_container_width=False, dpi=300)
-
 # =========================
 # Outputs
 # =========================
@@ -383,10 +363,8 @@ if st.session_state.chart_data:
         <div class="summary-item"><strong>Nakshatra:</strong> {cd['moon_nakshatra']} (Pada {cd['moon_pada']})</div>
     </div>
     """, unsafe_allow_html=True)
-
     st.subheader("Planetary Positions")
     st.dataframe(cd['df_planets'], hide_index=True, use_container_width=True)
-
     # Rasi & Navamsa (South Indian)
     st.subheader("Rasi (D1) & Navamsa (D9) — South Indian")
     col1, col2 = st.columns(2, gap="small")
@@ -397,16 +375,13 @@ if st.session_state.chart_data:
     fig2, ax2 = plt.subplots(figsize=size)
     plot_south_indian_style(ax2, cd['house_to_planets_nav'], cd['nav_lagna_sign'], 'Navamsa Chart (South Indian)')
     show_png(fig2)
-
     st.subheader("House Analysis")
     st.dataframe(cd['df_house_status'], hide_index=True, use_container_width=True)
-
     st.subheader(f"Vimshottari Dasa ({cd['selected_depth']})")
     dasa_rows = [{'Planet': lord, 'Start': s.strftime('%Y-%m-%d'),
                   'End': e.strftime('%Y-%m-%d'), 'Duration': duration_str(e-s,'dasa')}
                  for lord, s, e, _ in cd['dasa_periods_filtered']]
     st.dataframe(pd.DataFrame(dasa_rows), hide_index=True, use_container_width=True)
-
     max_depth_sel = cd['max_depth']
     dp = cd['dasa_periods_filtered']
     if max_depth_sel >= 2:
@@ -464,7 +439,6 @@ if st.session_state.chart_data:
                                                                       'Duration': duration_str(e-s,'sub_prana')} for l,s,e,_ in subp]),
                                                                     hide_index=True, use_container_width=True)
     st.info("Note: Periods are filtered from birth time; durations are approximate.")
-
     # =========================
     # SEPARATE INPUT: Current City → Live Micro-Periods
     # =========================
@@ -483,7 +457,6 @@ if st.session_state.chart_data:
             index=0
         )
     target_depth = _DEPTH_NAME_TO_INT[depth_choice]
-
     if st.button("Show current micro-periods", use_container_width=True):
         if not current_city_query or len(current_city_query) < 2:
             st.error("Please enter a valid current city.")
@@ -496,24 +469,19 @@ if st.session_state.chart_data:
                     cur = cur_locs[0]
                     cur_lat, cur_lon = cur.latitude, cur.longitude
                     tz = tz_for_latlon(cur_lat, cur_lon)
-
                     # "Now" in that city's timezone, then convert to naive UTC for comparisons
                     now_local = datetime.now(tz)
                     now_utc_naive = now_local.astimezone(pytz.UTC).replace(tzinfo=None)
-
                     dp = cd['dasa_periods_filtered']
-
                     # Active stack Dasa→…→target_depth
                     active_path = find_active_path_to_depth(dp, now_utc_naive, target_depth)
                     flat_at_depth = collect_periods_at_depth(dp, target_depth)
-
                     # Locate current index at this depth
                     idx = None
                     for i, (_, s, e) in enumerate(flat_at_depth):
                         if s <= now_utc_naive < e:
                             idx = i
                             break
-
                     st.success(f"Detected time zone: {tz.zone} • Local now: {now_local.strftime('%Y-%m-%d %H:%M')}")
                     if active_path:
                         st.markdown("**Active stack (Dasa → … → " + depth_choice + ")**")
@@ -525,13 +493,12 @@ if st.session_state.chart_data:
                                 "Level": labels[j],
                                 "Lord": lord,
                                 "Start (local)": s.replace(tzinfo=pytz.UTC).astimezone(tz).strftime('%Y-%m-%d %H:%M'),
-                                "End (local)":   e.replace(tzinfo=pytz.UTC).astimezone(tz).strftime('%Y-%m-%d %H:%M'),
+                                "End (local)": e.replace(tzinfo=pytz.UTC).astimezone(tz).strftime('%Y-%m-%d %H:%M'),
                                 "Duration": duration_str(e - s, level=level_key if labels[j].lower()==depth_choice.lower() else 'dasa')
                             })
                         st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
                     else:
                         st.info("Could not locate the active path at this depth. (Edge case near a boundary?)")
-
                     # Show current + next 5 at selected depth
                     if idx is not None:
                         nxt = flat_at_depth[idx: idx+6]
@@ -542,17 +509,14 @@ if st.session_state.chart_data:
                             tbl.append({
                                 "Lord": lord,
                                 "Start (local)": s.replace(tzinfo=pytz.UTC).astimezone(tz).strftime('%Y-%m-%d %H:%M'),
-                                "End (local)":   e.replace(tzinfo=pytz.UTC).astimezone(tz).strftime('%Y-%m-%d %H:%M'),
+                                "End (local)": e.replace(tzinfo=pytz.UTC).astimezone(tz).strftime('%Y-%m-%d %H:%M'),
                                 "Duration": duration_str(e - s, level=level_key)
                             })
                         st.dataframe(pd.DataFrame(tbl), hide_index=True, use_container_width=True)
-
                     st.caption("Note: Micro-period boundaries are absolute (UTC). We display them in your city’s local clock.")
             except Exception as e:
                 st.error(f"Could not compute local micro-periods: {e}")
-
 else:
     st.info("Enter birth details above and click 'Generate Chart' to begin")
-
 st.markdown("---")
 st.caption("Sivapathy Astrology Data Generator")
