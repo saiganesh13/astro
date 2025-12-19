@@ -66,6 +66,10 @@ bad_capacity_dict = {
     'Venus': 0,
     'Mercury': 0
 }
+shukla_good = [100, 9, 16, 23, 30, 37, 44, 51, 58, 65, 72, 79, 86, 93, 100]
+shukla_bad = [0] * 15
+krishna_good = [93, 86, 79, 72, 65, 58, 51, 44, 37, 30, 23, 16, 9, 2, 0]
+krishna_bad = [7, 14, 21, 28, 35, 42, 49, 56, 63, 70, 77, 84, 91, 98, 100]
 # ---- Astro helpers ----
 def get_lahiri_ayanamsa(year):
     base = 23.853; rate = 50.2388/3600.0
@@ -168,6 +172,19 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     lon_trop['rahu'] = omega; lon_trop['ketu'] = (omega + 180) % 360
     lon_sid = {p: get_sidereal_lon(lon_trop[p], ayan) for p in lon_trop}
     lagna_sid = get_sidereal_lon(get_ascendant(jd, lat, lon), ayan)
+    sun_lon = lon_sid['sun']
+    moon_lon = lon_sid['moon']
+    diff = (moon_lon - sun_lon) % 360
+    tithi_fraction = diff / 12
+    tithi = int(tithi_fraction) + 1
+    if tithi > 30:
+        tithi = 30
+    if tithi <= 15:
+        paksha = 'Shukla'
+        tithi_idx = tithi - 1
+    else:
+        paksha = 'Krishna'
+        tithi_idx = tithi - 16
     # planets table
     rows = []
     asc_deg = lagna_sid % 360; asc_sign = get_sign(asc_deg)
@@ -183,13 +200,30 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         dig_bala = calculate_dig_bala(p, L, lagna_sid)
         planet_cap = p.capitalize()
         sthana = sthana_bala_dict.get(planet_cap, [0]*12)[sign_names.index(sign)]
-        capacity = capacity_dict.get(planet_cap, None)
-        volume = (capacity / 100.0) * sthana if capacity is not None else ''
-        good = good_capacity_dict.get(planet_cap, None)
-        bad = bad_capacity_dict.get(planet_cap, None)
-        good_volume = volume * (good / 100.0) if good is not None and volume != '' else ''
-        bad_volume = volume * (bad / 100.0) if bad is not None and volume != '' else ''
-        rows.append([planet_cap, f"{L:.2f}", sign, nak, pada, f"{ld}/{sl}", f"{dig_bala}%" if dig_bala is not None else '', f"{sthana}%", f"{volume:.2f}" if volume != '' else '', f"{good_volume:.2f}" if good_volume != '' else '', f"{bad_volume:.2f}" if bad_volume != '' else ''])
+        if planet_cap == 'Rahu':
+            volume = 100.0
+            good_volume = 0.0
+            bad_volume = 100.0
+        elif planet_cap == 'Ketu':
+            volume = 100.0
+            good_volume = 50.0
+            bad_volume = 100.0
+        else:
+            capacity = capacity_dict.get(planet_cap, None)
+            volume = (capacity * sthana / 100.0) if capacity is not None else ''
+            if planet_cap == 'Moon':
+                if paksha == 'Shukla':
+                    good_capacity = shukla_good[tithi_idx]
+                    bad_capacity = shukla_bad[tithi_idx]
+                else:
+                    good_capacity = krishna_good[tithi_idx]
+                    bad_capacity = krishna_bad[tithi_idx]
+            else:
+                good_capacity = good_capacity_dict.get(planet_cap, None)
+                bad_capacity = bad_capacity_dict.get(planet_cap, None)
+            good_volume = (volume * (good_capacity / 100.0)) if good_capacity is not None and volume != '' else ''
+            bad_volume = (volume * (bad_capacity / 100.0)) if bad_capacity is not None and volume != '' else ''
+        rows.append([planet_cap, f"{L:.2f}", sign, nak, pada, f"{ld}/{sl}", f"{dig_bala}%" if dig_bala is not None else '', f"{sthana}%", f"{volume:.2f}" if isinstance(volume, float) else '', f"{good_volume:.2f}" if isinstance(good_volume, float) else '', f"{bad_volume:.2f}" if isinstance(bad_volume, float) else ''])
     df_planets = pd.DataFrame(rows, columns=['Planet','Deg','Sign','Nakshatra','Pada','Ld/SL','Dig Bala (%)','Sthana Bala (%)','Volume','Good Volume','Bad Volume'])
     # rasi houses
     house_planets_rasi = defaultdict(list); positions = {**lon_sid,'asc':lagna_sid}
