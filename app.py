@@ -48,7 +48,9 @@ capacity_dict = {
     'Jupiter': 100,
     'Venus': 50,
     'Mercury': 30,
-    'Moon': 100
+    'Moon': 100,
+    'Rahu': 100,
+    'Ketu': 50
 }
 good_capacity_dict = {
     'Saturn': 0,
@@ -56,7 +58,9 @@ good_capacity_dict = {
     'Sun': 50,
     'Jupiter': 100,
     'Venus': 100,
-    'Mercury': 100
+    'Mercury': 100,
+    'Rahu': 0,
+    'Ketu': 100
 }
 bad_capacity_dict = {
     'Saturn': 100,
@@ -64,7 +68,9 @@ bad_capacity_dict = {
     'Sun': 50,
     'Jupiter': 0,
     'Venus': 0,
-    'Mercury': 0
+    'Mercury': 0,
+    'Rahu': 100,
+    'Ketu': 0
 }
 shukla_good = [100, 9, 16, 23, 30, 37, 44, 51, 58, 65, 72, 79, 86, 93, 100]
 shukla_bad = [0] * 15
@@ -200,29 +206,20 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         dig_bala = calculate_dig_bala(p, L, lagna_sid)
         planet_cap = p.capitalize()
         sthana = sthana_bala_dict.get(planet_cap, [0]*12)[sign_names.index(sign)]
-        if planet_cap == 'Rahu':
-            volume = 100.0
-            good_volume = 0.0
-            bad_volume = 100.0
-        elif planet_cap == 'Ketu':
-            volume = 100.0
-            good_volume = 50.0
-            bad_volume = 100.0
-        else:
-            capacity = capacity_dict.get(planet_cap, None)
-            volume = (capacity * sthana / 100.0) if capacity is not None else ''
-            if planet_cap == 'Moon':
-                if paksha == 'Shukla':
-                    good_capacity = shukla_good[tithi_idx]
-                    bad_capacity = shukla_bad[tithi_idx]
-                else:
-                    good_capacity = krishna_good[tithi_idx]
-                    bad_capacity = krishna_bad[tithi_idx]
+        capacity = capacity_dict.get(planet_cap, None)
+        volume = (capacity * sthana / 100.0) if capacity is not None else ''
+        if planet_cap == 'Moon':
+            if paksha == 'Shukla':
+                good_capacity = shukla_good[tithi_idx]
+                bad_capacity = shukla_bad[tithi_idx]
             else:
-                good_capacity = good_capacity_dict.get(planet_cap, None)
-                bad_capacity = bad_capacity_dict.get(planet_cap, None)
-            good_volume = (volume * (good_capacity / 100.0)) if good_capacity is not None and volume != '' else ''
-            bad_volume = (volume * (bad_capacity / 100.0)) if bad_capacity is not None and volume != '' else ''
+                good_capacity = krishna_good[tithi_idx]
+                bad_capacity = krishna_bad[tithi_idx]
+        else:
+            good_capacity = good_capacity_dict.get(planet_cap, None)
+            bad_capacity = bad_capacity_dict.get(planet_cap, None)
+        good_volume = (volume * (good_capacity / 100.0)) if good_capacity is not None and volume != '' else ''
+        bad_volume = (volume * (bad_capacity / 100.0)) if bad_capacity is not None and volume != '' else ''
         rows.append([planet_cap, f"{L:.2f}", sign, nak, pada, f"{ld}/{sl}", f"{dig_bala}%" if dig_bala is not None else '', f"{sthana}%", f"{volume:.2f}" if isinstance(volume, float) else '', f"{good_volume:.2f}" if isinstance(good_volume, float) else '', f"{bad_volume:.2f}" if isinstance(bad_volume, float) else ''])
     df_planets = pd.DataFrame(rows, columns=['Planet','Deg','Sign','Nakshatra','Pada','Ld/SL','Dig Bala (%)','Sthana Bala (%)','Volume','Good Volume','Bad Volume'])
     # rasi houses
