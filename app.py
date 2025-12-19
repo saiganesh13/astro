@@ -203,10 +203,11 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     # planets table
     rows = []
     planet_data = {}
+    consumed_notes = {}
     asc_deg = lagna_sid % 360; asc_sign = get_sign(asc_deg)
     a_nak, a_pada, a_ld, a_sl = get_nakshatra_details(asc_deg)
     dig_bala_asc = calculate_dig_bala('asc', asc_deg, lagna_sid)
-    rows.append(['Asc', f"{asc_deg:.2f}", asc_sign, a_nak, a_pada, f"{a_ld}/{a_sl}", f"{dig_bala_asc}%" if dig_bala_asc is not None else '', '', '', '', ''])
+    rows.append(['Asc', f"{asc_deg:.2f}", asc_sign, a_nak, a_pada, f"{a_ld}/{a_sl}", f"{dig_bala_asc}%" if dig_bala_asc is not None else '', '', '', '', '', ''])
     for p in ['sun','moon','mars','mercury','jupiter','venus','saturn','rahu','ketu']:
         L = lon_sid[p]; sign = get_sign(L); nak, pada, ld, sl = get_nakshatra_details(L)
         dig_bala = calculate_dig_bala(p, L, lagna_sid)
@@ -234,18 +235,20 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
             good_volume = (volume * (good_capacity / 100.0)) if good_capacity is not None and volume != '' else ''
             bad_volume = (volume * (bad_capacity / 100.0)) if bad_capacity is not None and volume != '' else ''
         planet_data[planet_cap] = {'sthana': sthana, 'volume': volume, 'good_volume': good_volume, 'bad_volume': bad_volume, 'dig_bala': dig_bala, 'L': L, 'sign': sign, 'nak': nak, 'pada': pada, 'ld_sl': f"{ld}/{sl}"}
+        consumed_notes[planet_cap] = {'good': [], 'bad': []}
     # Adjust for conjunctions
     for h in range(1, 13):
         house_planets = [p for p in house_planets_rasi[h] if p != 'Asc']
         if len(house_planets) > 1:
-            # Handle bad volume grabbing from good
-            grabber_planets = [p for p in house_planets if p in grabbers and planet_data[p]['bad_volume'] > 0]
-            grabber_planets.sort(key=lambda p: order_dict.get(p, 9))
-            for grabber in grabber_planets:
+            # General grab for any with bad_volume >0
+            general_grabbers = [p for p in house_planets if planet_data[p]['bad_volume'] > 0]
+            general_grabbers.sort(key=lambda p: -order_dict.get(p, 0))  # descending order, higher number first (Rahu 7 first)
+            for grabber in general_grabbers:
+                grab_from = [p for p in house_planets if p != grabber and planet_data[p]['good_volume'] > 0]
                 if grabber == 'Ketu':
-                    grab_from = [p for p in house_planets if p in ['Sun', 'Moon'] and planet_data[p]['good_volume'] > 0]
-                else:
-                    grab_from = [p for p in house_planets if p != grabber and planet_data[p]['good_volume'] > 0]
+                    grab_from = [p for p in grab_from if p in ['Sun', 'Moon']]
+                elif grabber == 'Jupiter':
+                    grab_from = [p for p in grab_from if p == 'Moon']
                 if grab_from:
                     total_good = sum(planet_data[p]['good_volume'] for p in grab_from)
                     grab_amount = min(planet_data[grabber]['bad_volume'], total_good)
@@ -253,43 +256,33 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                         proportion = planet_data[grabbed]['good_volume'] / total_good if total_good > 0 else 0
                         reduce = proportion * grab_amount
                         planet_data[grabbed]['good_volume'] -= reduce
-                    planet_data[grabber]['bad_volume'] -= grab_amount
-            # Handle exchange between good planets
-            good_planets = [p for p in house_planets if planet_data[p]['bad_volume'] > 0]
-            if len(good_planets) > 1:
-                # For good planets with bad volume, exchange? But according to the prompt, bad volume grabs good from conjuncted
-                # Since they are good, but if they have bad volume, treat as grabbers
-                # But the prompt says "the bad volume planet grabs good volume from conjuncted planet"
-                # So any planet with bad volume grabs from others with good volume
-                # So perhaps move this to a general grab for any with bad_volume >0
-                # But to avoid duplicate, perhaps combine
-                # The previous is only for grabbers, but to make general
-                # Let's make it general for any planet with bad_volume >0
-                # But according to the prompt, "badvolume always try to become neutralise, so if you 2 or more planet in conjunction the bad volume planet grabs good volume from conjuncted planet."
-                # So any bad volume planet grabs from conjuncted planets' good volume
-                # The order is to prioritize the order
-                # So sort all planets with bad_volume >0 by order
-                general_grabbers = [p for p in house_planets if planet_data[p]['bad_volume'] > 0]
-                general_grabbers.sort(key=lambda p: order_dict.get(p, 9))
-                for grabber in general_grabbers:
-                    grab_from = [p for p in house_planets if p != grabber and planet_data[p]['good_volume'] > 0]
-                    if grabber == 'Ketu':
-                        grab_from = [p for p in grab_from if p in ['Sun', 'Moon']]
-                    elif grabber == 'Jupiter':
-                        grab_from = [p for p in grab_from if p == 'Moon']  # Takes only from moon based on good/bad volume
-                    if grab_from:
-                        total_good = sum(planet_data[p]['good_volume'] for p in grab_from)
-                        grab_amount = min(planet_data[grabber]['bad_volume'], total_good)
-                        for grabbed in grab_from:
-                            proportion = planet_data[grabbed]['good_volume'] / total_good if total_good > 0 else 0
-                            reduce = proportion * grab_amount
-                            planet_data[grabbed]['good_volume'] -= reduce
-                        planet_data[grabber]['bad_volume'] -= grab_amount
+                        planet_data[grabber]['bad_volume'] -= reduce
+                        consumed_notes[grabber]['good'].append(f"{reduce:.2f} from {grabbed}")
+                        consumed_notes[grabbed]['good'].append(f"{-reduce:.2f} to {grabber}")
+            # For pure good planets houses (after grabbing, if no bad left, but since grabbing reduces bad, for remaining good
+            remaining_bad = sum(planet_data[p]['bad_volume'] for p in house_planets)
+            if remaining_bad == 0:
+                good_planets = [p for p in house_planets if planet_data[p]['good_volume'] > 0]
+                if len(good_planets) > 1:
+                    avg_good = sum(planet_data[p]['good_volume'] for p in good_planets) / len(good_planets)
+                    for p in good_planets:
+                        diff = avg_good - planet_data[p]['good_volume']
+                        planet_data[p]['good_volume'] = avg_good
+                        if diff > 0:
+                            consumed_notes[p]['good'].append(f"{diff:.2f} from others in exchange")
+                        elif diff < 0:
+                            consumed_notes[p]['good'].append(f"{diff:.2f} to others in exchange")
     # Build rows with adjusted
     for p in ['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn','Rahu','Ketu']:
         data = planet_data[p]
-        rows.append([p, f"{data['L']:.2f}", data['sign'], data['nak'], data['pada'], data['ld_sl'], f"{data['dig_bala']}%" if data['dig_bala'] is not None else '', f"{data['sthana']}%", f"{data['volume']:.2f}" if isinstance(data['volume'], float) else '', f"{data['good_volume']:.2f}" if isinstance(data['good_volume'], float) else '', f"{data['bad_volume']:.2f}" if isinstance(data['bad_volume'], float) else ''])
-    df_planets = pd.DataFrame(rows, columns=['Planet','Deg','Sign','Nakshatra','Pada','Ld/SL','Dig Bala (%)','Sthana Bala (%)','Volume','Good Volume','Bad Volume'])
+        notes = []
+        if consumed_notes[p]['good']:
+            notes.append(f"Good: {'; '.join(consumed_notes[p]['good'])}")
+        if consumed_notes[p]['bad']:
+            notes.append(f"Bad: {'; '.join(consumed_notes[p]['bad'])}")
+        note_str = '; '.join(notes)
+        rows.append([p, f"{data['L']:.2f}", data['sign'], data['nak'], data['pada'], data['ld_sl'], f"{data['dig_bala']}%" if data['dig_bala'] is not None else '', f"{data['sthana']}%", f"{data['volume']:.2f}" if isinstance(data['volume'], float) else '', f"{data['good_volume']:.2f}" if isinstance(data['good_volume'], float) else '', f"{data['bad_volume']:.2f}" if isinstance(data['bad_volume'], float) else '', note_str])
+    df_planets = pd.DataFrame(rows, columns=['Planet','Deg','Sign','Nakshatra','Pada','Ld/SL','Dig Bala (%)','Sthana Bala (%)','Volume','Good Volume','Bad Volume','Consumed Notes'])
     # df_rasi
     df_rasi = pd.DataFrame([[f"House {h}", get_sign((lagna_sid+(h-1)*30)%360),
                              ', '.join(sorted(house_planets_rasi[h])) if house_planets_rasi[h] else 'Empty']
