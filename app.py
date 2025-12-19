@@ -76,8 +76,8 @@ shukla_good = [100, 9, 16, 23, 30, 37, 44, 51, 58, 65, 72, 79, 86, 93, 100]
 shukla_bad = [0] * 15
 krishna_good = [93, 86, 79, 72, 65, 58, 51, 44, 37, 30, 23, 16, 9, 2, 0]
 krishna_bad = [7, 14, 21, 28, 35, 42, 49, 56, 63, 70, 77, 84, 91, 98, 100]
-order_dict = {'Jupiter':1, 'Venus':2, 'Mercury':3, 'Sun':4, 'Mars':5, 'Saturn':6, 'Rahu':7, 'Ketu':8}
-grabbers = ['Jupiter','Venus','Mercury','Sun','Mars','Saturn','Rahu','Ketu']
+order_dict = {'Jupiter':1, 'Venus':2, 'Mercury':3, 'Sun':4, 'Mars':5, 'Saturn':6, 'Rahu':7, 'Ketu':8, 'Moon':4.5}
+mix_dict = {0:100,1:100,2:100,3:95,4:90,5:85,6:80,7:75,8:70,9:65,10:60,11:55,12:50,13:45,14:40,15:35,16:30,17:25,18:20,19:15,20:10,21:5,22:0}
 # ---- Astro helpers ----
 def get_lahiri_ayanamsa(year):
     base = 23.853; rate = 50.2388/3600.0
@@ -240,9 +240,14 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     for h in range(1, 13):
         house_planets = [p for p in house_planets_rasi[h] if p != 'Asc']
         if len(house_planets) > 1:
+            # First, special for Ketu
+            if 'Ketu' in house_planets:
+                if 'Sun' in house_planets or 'Moon' in house_planets:
+                    planet_data['Ketu']['bad_volume'] = planet_data['Ketu']['volume']
+                    planet_data['Ketu']['good_volume'] = 0.0
             # General grab for any with bad_volume >0
             general_grabbers = [p for p in house_planets if planet_data[p]['bad_volume'] > 0]
-            general_grabbers.sort(key=lambda p: -order_dict.get(p, 0))  # descending order, higher number first (Rahu 7 first)
+            general_grabbers.sort(key=lambda p: order_dict.get(p, 9))
             for grabber in general_grabbers:
                 grab_from = [p for p in house_planets if p != grabber and planet_data[p]['good_volume'] > 0]
                 if grabber == 'Ketu':
@@ -250,28 +255,40 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                 elif grabber == 'Jupiter':
                     grab_from = [p for p in grab_from if p == 'Moon']
                 if grab_from:
-                    total_good = sum(planet_data[p]['good_volume'] for p in grab_from)
-                    grab_amount = min(planet_data[grabber]['bad_volume'], total_good)
                     for grabbed in grab_from:
-                        proportion = planet_data[grabbed]['good_volume'] / total_good if total_good > 0 else 0
-                        reduce = proportion * grab_amount
-                        planet_data[grabbed]['good_volume'] -= reduce
-                        planet_data[grabber]['bad_volume'] -= reduce
-                        consumed_notes[grabber]['good'].append(f"{reduce:.2f} from {grabbed}")
-                        consumed_notes[grabbed]['good'].append(f"{-reduce:.2f} to {grabber}")
-            # For pure good planets houses (after grabbing, if no bad left, but since grabbing reduces bad, for remaining good
+                        deg_diff = int(abs(planet_data[grabber]['L'] - planet_data[grabbed]['L']))
+                        mix = mix_dict.get(min(deg_diff, 22), 0) / 100.0
+                        total_good = planet_data[grabbed]['good_volume']
+                        grab_amount = min(planet_data[grabber]['bad_volume'], total_good) * mix
+                        planet_data[grabbed]['good_volume'] -= grab_amount
+                        planet_data[grabber]['good_volume'] += grab_amount
+                        if grab_amount > 0:
+                            consumed_notes[grabber]['good'].append(f"{grab_amount:.2f} from {grabbed}")
+                            consumed_notes[grabbed]['good'].append(f"{-grab_amount:.2f} to {grabber}")
+                # For Ketu exchange bad
+                if grabber == 'Ketu':
+                    for grabbed in grab_from:
+                        bad_add = planet_data[grabber]['bad_volume'] / len(grab_from)
+                        planet_data[grabbed]['bad_volume'] += bad_add
+                        consumed_notes[grabbed]['bad'].append(f"{bad_add:.2f} from {grabber}")
+                        consumed_notes[grabber]['bad'].append(f"{-bad_add:.2f} to {grabbed}")
+            # For exchange among good planets
             remaining_bad = sum(planet_data[p]['bad_volume'] for p in house_planets)
             if remaining_bad == 0:
                 good_planets = [p for p in house_planets if planet_data[p]['good_volume'] > 0]
                 if len(good_planets) > 1:
-                    avg_good = sum(planet_data[p]['good_volume'] for p in good_planets) / len(good_planets)
+                    original_goods = {p: planet_data[p]['good_volume'] for p in good_planets}
+                    total_good = sum(original_goods.values())
+                    avg_good = total_good / len(good_planets)
                     for p in good_planets:
-                        diff = avg_good - planet_data[p]['good_volume']
                         planet_data[p]['good_volume'] = avg_good
+                    for p in good_planets:
+                        diff = planet_data[p]['good_volume'] - original_goods[p]
+                        others = [q for q in good_planets if q != p]
                         if diff > 0:
-                            consumed_notes[p]['good'].append(f"{diff:.2f} from others in exchange")
+                            consumed_notes[p]['good'].append(f"{diff:.2f} from exchange with {', '.join(others)}")
                         elif diff < 0:
-                            consumed_notes[p]['good'].append(f"{diff:.2f} to others in exchange")
+                            consumed_notes[p]['good'].append(f"{diff:.2f} to exchange with {', '.join(others)}")
     # Build rows with adjusted
     for p in ['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn','Rahu','Ketu']:
         data = planet_data[p]
