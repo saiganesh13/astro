@@ -76,7 +76,7 @@ shukla_good = [100, 9, 16, 23, 30, 37, 44, 51, 58, 65, 72, 79, 86, 93, 100]
 shukla_bad = [0] * 15
 krishna_good = [93, 86, 79, 72, 65, 58, 51, 44, 37, 30, 23, 16, 9, 2, 0]
 krishna_bad = [7, 14, 21, 28, 35, 42, 49, 56, 63, 70, 77, 84, 91, 98, 100]
-order_dict = {'Jupiter':1, 'Venus':2, 'Mercury':3, 'Sun':4, 'Mars':5, 'Saturn':6, 'Rahu':7, 'Ketu':8, 'Moon':4.5}
+order_dict = {'Jupiter':1, 'Venus':2, 'Mercury':3, 'Sun':4, 'Mars':5, 'Saturn':6, 'Rahu':7, 'Ketu':8}
 mix_dict = {0:100,1:100,2:100,3:95,4:90,5:85,6:80,7:75,8:70,9:65,10:60,11:55,12:50,13:45,14:40,15:35,16:30,17:25,18:20,19:15,20:10,21:5,22:0}
 # ---- Astro helpers ----
 def get_lahiri_ayanamsa(year):
@@ -215,9 +215,11 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         sthana = sthana_bala_dict.get(planet_cap, [0]*12)[sign_names.index(sign)]
         capacity = capacity_dict.get(planet_cap, None)
         volume = (capacity * sthana / 100.0) if capacity is not None else ''
+        cap_good = volume
+        cap_bad = volume
         if planet_cap == 'Rahu':
             good_volume = 0.0
-            bad_volume = 100.0
+            bad_volume = volume
         elif planet_cap == 'Ketu':
             good_volume = 50.0
             bad_volume = 0.0
@@ -234,45 +236,48 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                 bad_capacity = bad_capacity_dict.get(planet_cap, None)
             good_volume = (volume * (good_capacity / 100.0)) if good_capacity is not None and volume != '' else ''
             bad_volume = (volume * (bad_capacity / 100.0)) if bad_capacity is not None and volume != '' else ''
-        planet_data[planet_cap] = {'sthana': sthana, 'volume': volume, 'good_volume': good_volume, 'bad_volume': bad_volume, 'dig_bala': dig_bala, 'L': L, 'sign': sign, 'nak': nak, 'pada': pada, 'ld_sl': f"{ld}/{sl}"}
+        planet_data[planet_cap] = {'sthana': sthana, 'volume': volume, 'good_volume': good_volume, 'bad_volume': bad_volume, 'cap_good': cap_good, 'cap_bad': cap_bad, 'dig_bala': dig_bala, 'L': L, 'sign': sign, 'nak': nak, 'pada': pada, 'ld_sl': f"{ld}/{sl}"}
         consumed_notes[planet_cap] = {'good': [], 'bad': []}
     # Adjust for conjunctions
     for h in range(1, 13):
         house_planets = [p for p in house_planets_rasi[h] if p != 'Asc']
         if len(house_planets) > 1:
-            # First, special for Ketu
-            if 'Ketu' in house_planets:
-                if 'Sun' in house_planets or 'Moon' in house_planets:
-                    planet_data['Ketu']['bad_volume'] = planet_data['Ketu']['volume']
-                    planet_data['Ketu']['good_volume'] = 0.0
+            # Special for Ketu
+            if 'Ketu' in house_planets and ('Sun' in house_planets or 'Moon' in house_planets):
+                planet_data['Ketu']['bad_volume'] = planet_data['Ketu']['volume']
+                planet_data['Ketu']['good_volume'] = 0.0
             # General grab for any with bad_volume >0
             general_grabbers = [p for p in house_planets if planet_data[p]['bad_volume'] > 0]
-            general_grabbers.sort(key=lambda p: order_dict.get(p, 9))
+            general_grabbers.sort(key=lambda p: -order_dict.get(p, 0))  # higher order first
             for grabber in general_grabbers:
-                grab_from = [p for p in house_planets if p != grabber and planet_data[p]['good_volume'] > 0]
-                if grabber == 'Ketu':
-                    grab_from = [p for p in grab_from if p in ['Sun', 'Moon']]
-                elif grabber == 'Jupiter':
-                    grab_from = [p for p in grab_from if p == 'Moon']
-                if grab_from:
-                    for grabbed in grab_from:
-                        deg_diff = int(abs(planet_data[grabber]['L'] - planet_data[grabbed]['L']))
-                        mix = mix_dict.get(min(deg_diff, 22), 0) / 100.0
-                        total_good = planet_data[grabbed]['good_volume']
-                        grab_amount = min(planet_data[grabber]['bad_volume'], total_good) * mix
+                for grabbed in [p for p in house_planets if p != grabber and planet_data[p]['good_volume'] > 0]:
+                    if grabber == 'Ketu' and grabbed not in ['Sun', 'Moon']:
+                        continue
+                    if grabber == 'Jupiter' and grabbed != 'Moon':
+                        continue
+                    deg_diff = int(abs(planet_data[grabber]['L'] - planet_data[grabbed]['L']))
+                    mix = mix_dict.get(min(deg_diff, 22), 0) / 100.0
+                    available_grab = planet_data[grabbed]['good_volume'] * mix
+                    room = planet_data[grabber]['cap_good'] - planet_data[grabber]['good_volume']
+                    grab_amount = min(available_grab, room)
+                    if grab_amount > 0:
                         planet_data[grabbed]['good_volume'] -= grab_amount
                         planet_data[grabber]['good_volume'] += grab_amount
-                        if grab_amount > 0:
-                            consumed_notes[grabber]['good'].append(f"{grab_amount:.2f} from {grabbed}")
-                            consumed_notes[grabbed]['good'].append(f"{-grab_amount:.2f} to {grabber}")
-                # For Ketu exchange bad
-                if grabber == 'Ketu':
-                    for grabbed in grab_from:
-                        bad_add = planet_data[grabber]['bad_volume'] / len(grab_from)
-                        planet_data[grabbed]['bad_volume'] += bad_add
-                        consumed_notes[grabbed]['bad'].append(f"{bad_add:.2f} from {grabber}")
-                        consumed_notes[grabber]['bad'].append(f"{-bad_add:.2f} to {grabbed}")
-            # For exchange among good planets
+                        consumed_notes[grabber]['good'].append(f"{grab_amount:.2f} from {grabbed}")
+                        consumed_notes[grabbed]['good'].append(f"{-grab_amount:.2f} to {grabber}")
+            # For Ketu exchange bad in full
+            if 'Ketu' in house_planets:
+                ketu_bad = planet_data['Ketu']['bad_volume']
+                grabbed_list = [p for p in house_planets if p in ['Sun', 'Moon']]
+                if grabbed_list:
+                    add_per = ketu_bad / len(grabbed_list)
+                    for grabbed in grabbed_list:
+                        room_bad = planet_data[grabbed]['cap_bad'] - planet_data[grabbed]['bad_volume']
+                        add = min(add_per, room_bad)
+                        planet_data[grabbed]['bad_volume'] += add
+                        consumed_notes[grabbed]['bad'].append(f"{add:.2f} from Ketu")
+                        consumed_notes['Ketu']['bad'].append(f"{-add:.2f} to {grabbed}")
+            # For good planets exchange
             remaining_bad = sum(planet_data[p]['bad_volume'] for p in house_planets)
             if remaining_bad == 0:
                 good_planets = [p for p in house_planets if planet_data[p]['good_volume'] > 0]
@@ -280,15 +285,34 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                     original_goods = {p: planet_data[p]['good_volume'] for p in good_planets}
                     total_good = sum(original_goods.values())
                     avg_good = total_good / len(good_planets)
+                    losers = [p for p in good_planets if original_goods[p] > avg_good]
+                    total_loss = sum(original_goods[p] - avg_good for p in losers)
                     for p in good_planets:
-                        planet_data[p]['good_volume'] = avg_good
+                        planet_data[p]['good_volume'] = min(avg_good, planet_data[p]['cap_good'] - planet_data[p]['bad_volume'])
                     for p in good_planets:
                         diff = planet_data[p]['good_volume'] - original_goods[p]
-                        others = [q for q in good_planets if q != p]
                         if diff > 0:
-                            consumed_notes[p]['good'].append(f"{diff:.2f} from exchange with {', '.join(others)}")
+                            for loser in losers:
+                                proportion = (original_goods[loser] - avg_good) / total_loss if total_loss > 0 else 0
+                                add_from = diff * proportion
+                                consumed_notes[p]['good'].append(f"{add_from:.2f} from {loser}")
                         elif diff < 0:
-                            consumed_notes[p]['good'].append(f"{diff:.2f} to exchange with {', '.join(others)}")
+                            consumed_notes[p]['good'].append(f"{diff:.2f} to group")
+            # For good planets that lost good, share back based on degree gap
+            lost_good_planets = [p for p in house_planets if planet_data[p]['bad_volume'] == 0 and planet_data[p]['good_volume'] < planet_data[p]['volume'] * (good_capacity_dict.get(p, 100) / 100)]
+            for lost in lost_good_planets:
+                share_from = [p for p in house_planets if p != lost and planet_data[p]['good_volume'] > 0]
+                for sharer in share_from:
+                    deg_diff = int(abs(planet_data[lost]['L'] - planet_data[sharer]['L']))
+                    mix = mix_dict.get(min(deg_diff, 22), 0) / 100.0
+                    available_share = planet_data[sharer]['good_volume'] * mix
+                    needed = planet_data[lost]['volume'] * (good_capacity_dict.get(lost, 100) / 100) - planet_data[lost]['good_volume']
+                    share_amount = min(available_share, needed)
+                    if share_amount > 0:
+                        planet_data[sharer]['good_volume'] -= share_amount
+                        planet_data[lost]['good_volume'] += share_amount
+                        consumed_notes[lost]['good'].append(f"{share_amount:.2f} shared from {sharer}")
+                        consumed_notes[sharer]['good'].append(f"{-share_amount:.2f} shared to {lost}")
     # Build rows with adjusted
     for p in ['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn','Rahu','Ketu']:
         data = planet_data[p]
