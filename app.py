@@ -195,6 +195,11 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         tithi_idx = tithi - 1 if tithi <=15 else tithi -16
     else:
         tithi_idx = tithi -1 if tithi <=15 else tithi -16
+    # rasi houses first for conjunctions
+    house_planets_rasi = defaultdict(list)
+    positions = {**lon_sid, 'asc': lagna_sid}
+    for p, L in positions.items():
+        house_planets_rasi[get_house(L, lagna_sid)].append(p.capitalize() if p != 'asc' else 'Asc')
     # planets table
     rows = []
     planet_data = {}
@@ -233,6 +238,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     for h in range(1, 13):
         house_planets = [p for p in house_planets_rasi[h] if p != 'Asc']
         if len(house_planets) > 1:
+            # Handle bad volume grabbing from good
             grabber_planets = [p for p in house_planets if p in grabbers and planet_data[p]['bad_volume'] > 0]
             grabber_planets.sort(key=lambda p: order_dict.get(p, 9))
             for grabber in grabber_planets:
@@ -248,18 +254,17 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                         reduce = proportion * grab_amount
                         planet_data[grabbed]['good_volume'] -= reduce
                     planet_data[grabber]['bad_volume'] -= grab_amount
+            # Handle exchange between good planets if they have bad volume (though typically 0)
+            good_planets = [p for p in house_planets if p not in grabbers or planet_data[p]['bad_volume'] == 0]
+            if len(good_planets) > 1:
+                # Assuming exchange means averaging good volume or something, but since bad=0, no need for grabbing.
+                # If any good has bad >0 (mixed), but already handled above.
+                pass  # No action if no bad volume
     # Build rows with adjusted
     for p in ['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn','Rahu','Ketu']:
         data = planet_data[p]
         rows.append([p, f"{data['L']:.2f}", data['sign'], data['nak'], data['pada'], data['ld_sl'], f"{data['dig_bala']}%" if data['dig_bala'] is not None else '', f"{data['sthana']}%", f"{data['volume']:.2f}" if isinstance(data['volume'], float) else '', f"{data['good_volume']:.2f}" if isinstance(data['good_volume'], float) else '', f"{data['bad_volume']:.2f}" if isinstance(data['bad_volume'], float) else ''])
     df_planets = pd.DataFrame(rows, columns=['Planet','Deg','Sign','Nakshatra','Pada','Ld/SL','Dig Bala (%)','Sthana Bala (%)','Volume','Good Volume','Bad Volume'])
-    # rasi houses
-    house_planets_rasi = defaultdict(list); positions = {**lon_sid,'asc':lagna_sid}
-    for p,L in positions.items():
-        house_planets_rasi[get_house(L, lagna_sid)].append(p.capitalize() if p!='asc' else 'Asc')
-    df_rasi = pd.DataFrame([[f"House {h}", get_sign((lagna_sid+(h-1)*30)%360),
-                             ', '.join(sorted(house_planets_rasi[h])) if house_planets_rasi[h] else 'Empty']
-                            for h in range(1,13)], columns=['House','Sign','Planets'])
     # navamsa
     nav_lagna = (lagna_sid*9) % 360
     house_planets_nav = defaultdict(list)
