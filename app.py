@@ -30,6 +30,17 @@ nak_names = ['Ashwini','Bharani','Krittika','Rohini','Mrigashira','Ardra','Punar
              'Purva Bhadrapada','Uttara Bhadrapada','Revati']
 years = [7, 20, 6, 10, 7, 18, 16, 19, 17] * 3
 sign_lords = ['Mars','Venus','Mercury','Moon','Sun','Mercury','Venus','Mars','Jupiter','Saturn','Saturn','Jupiter']
+sthana_bala_dict = {
+    'Sun': [100,90,80,70,60,50,40,50,60,70,80,90],
+    'Moon': [90,100,90,80,70,60,60,50,70,70,70,90],
+    'Jupiter': [60,60,70,100,90,60,75,60,80,40,50,80],
+    'Venus': [60,70,60,50,40,35,80,50,60,80,70,100],
+    'Mercury': [40,60,70,45,60,100,60,45,55,50,45,35],
+    'Mars': [80,70,45,35,60,45,50,60,60,100,90,60],
+    'Saturn': [35,50,60,70,80,60,100,90,50,60,80,50],
+    'Rahu': [100]*12,
+    'Ketu': [100]*12
+}
 # ---- Astro helpers ----
 def get_lahiri_ayanamsa(year):
     base = 23.853; rate = 50.2388/3600.0
@@ -137,12 +148,15 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     asc_deg = lagna_sid % 360; asc_sign = get_sign(asc_deg)
     a_nak, a_pada, a_ld, a_sl = get_nakshatra_details(asc_deg)
     dig_bala_asc = calculate_dig_bala('asc', asc_deg, lagna_sid)
-    rows.append(['Asc', f"{asc_deg:.2f}", asc_sign, a_nak, a_pada, f"{a_ld}/{a_sl}", f"{dig_bala_asc}%" if dig_bala_asc is not None else ''])
+    sthana_asc = ''
+    rows.append(['Asc', f"{asc_deg:.2f}", asc_sign, a_nak, a_pada, f"{a_ld}/{a_sl}", f"{dig_bala_asc}%" if dig_bala_asc is not None else '', sthana_asc])
     for p in ['sun','moon','mars','mercury','jupiter','venus','saturn','rahu','ketu']:
         L = lon_sid[p]; sign = get_sign(L); nak, pada, ld, sl = get_nakshatra_details(L)
         dig_bala = calculate_dig_bala(p, L, lagna_sid)
-        rows.append([p.capitalize(), f"{L:.2f}", sign, nak, pada, f"{ld}/{sl}", f"{dig_bala}%" if dig_bala is not None else ''])
-    df_planets = pd.DataFrame(rows, columns=['Planet','Deg','Sign','Nakshatra','Pada','Ld/SL','Dig Bala (%)'])
+        planet_cap = p.capitalize()
+        sthana = sthana_bala_dict.get(planet_cap, [0]*12)[sign_names.index(sign)]
+        rows.append([planet_cap, f"{L:.2f}", sign, nak, pada, f"{ld}/{sl}", f"{dig_bala}%" if dig_bala is not None else '', f"{sthana}%"])
+    df_planets = pd.DataFrame(rows, columns=['Planet','Deg','Sign','Nakshatra','Pada','Ld/SL','Dig Bala (%)','Sthana Bala (%)'])
     # rasi houses
     house_planets_rasi = defaultdict(list); positions = {**lon_sid,'asc':lagna_sid}
     for p,L in positions.items():
