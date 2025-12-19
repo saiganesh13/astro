@@ -215,14 +215,16 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         sthana = sthana_bala_dict.get(planet_cap, [0]*12)[sign_names.index(sign)]
         capacity = capacity_dict.get(planet_cap, None)
         volume = (capacity * sthana / 100.0) if capacity is not None else ''
-        cap_good = volume
-        cap_bad = volume
         if planet_cap == 'Rahu':
             good_volume = 0.0
             bad_volume = volume
+            cap_good = 0
+            cap_bad = volume
         elif planet_cap == 'Ketu':
             good_volume = 50.0
             bad_volume = 0.0
+            cap_good = 50.0
+            cap_bad = 0.0
         else:
             if planet_cap == 'Moon':
                 if paksha == 'Shukla':
@@ -236,6 +238,8 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                 bad_capacity = bad_capacity_dict.get(planet_cap, None)
             good_volume = (volume * (good_capacity / 100.0)) if good_capacity is not None and volume != '' else ''
             bad_volume = (volume * (bad_capacity / 100.0)) if bad_capacity is not None and volume != '' else ''
+            cap_good = volume
+            cap_bad = volume
         planet_data[planet_cap] = {'sthana': sthana, 'volume': volume, 'good_volume': good_volume, 'bad_volume': bad_volume, 'cap_good': cap_good, 'cap_bad': cap_bad, 'dig_bala': dig_bala, 'L': L, 'sign': sign, 'nak': nak, 'pada': pada, 'ld_sl': f"{ld}/{sl}"}
         consumed_notes[planet_cap] = {'good': [], 'bad': []}
     # Adjust for conjunctions
@@ -246,6 +250,8 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
             if 'Ketu' in house_planets and ('Sun' in house_planets or 'Moon' in house_planets):
                 planet_data['Ketu']['bad_volume'] = planet_data['Ketu']['volume']
                 planet_data['Ketu']['good_volume'] = 0.0
+                planet_data['Ketu']['cap_good'] = 0.0
+                planet_data['Ketu']['cap_bad'] = planet_data['Ketu']['volume']
             # General grab for any with bad_volume >0
             general_grabbers = [p for p in house_planets if planet_data[p]['bad_volume'] > 0]
             general_grabbers.sort(key=lambda p: -order_dict.get(p, 0))  # higher order first
@@ -259,10 +265,11 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                     mix = mix_dict.get(min(deg_diff, 22), 0) / 100.0
                     available_grab = planet_data[grabbed]['good_volume'] * mix
                     room = planet_data[grabber]['cap_good'] - planet_data[grabber]['good_volume']
-                    grab_amount = min(available_grab, room)
+                    grab_amount = min(available_grab, room, planet_data[grabber]['bad_volume'])
                     if grab_amount > 0:
                         planet_data[grabbed]['good_volume'] -= grab_amount
                         planet_data[grabber]['good_volume'] += grab_amount
+                        planet_data[grabber]['bad_volume'] -= grab_amount
                         consumed_notes[grabber]['good'].append(f"{grab_amount:.2f} from {grabbed}")
                         consumed_notes[grabbed]['good'].append(f"{-grab_amount:.2f} to {grabber}")
             # For Ketu exchange bad in full
@@ -275,9 +282,10 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                         room_bad = planet_data[grabbed]['cap_bad'] - planet_data[grabbed]['bad_volume']
                         add = min(add_per, room_bad)
                         planet_data[grabbed]['bad_volume'] += add
+                        planet_data['Ketu']['bad_volume'] -= add
                         consumed_notes[grabbed]['bad'].append(f"{add:.2f} from Ketu")
                         consumed_notes['Ketu']['bad'].append(f"{-add:.2f} to {grabbed}")
-            # For good planets exchange
+            # For exchange among good planets
             remaining_bad = sum(planet_data[p]['bad_volume'] for p in house_planets)
             if remaining_bad == 0:
                 good_planets = [p for p in house_planets if planet_data[p]['good_volume'] > 0]
@@ -285,19 +293,15 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                     original_goods = {p: planet_data[p]['good_volume'] for p in good_planets}
                     total_good = sum(original_goods.values())
                     avg_good = total_good / len(good_planets)
-                    losers = [p for p in good_planets if original_goods[p] > avg_good]
-                    total_loss = sum(original_goods[p] - avg_good for p in losers)
                     for p in good_planets:
-                        planet_data[p]['good_volume'] = min(avg_good, planet_data[p]['cap_good'] - planet_data[p]['bad_volume'])
+                        planet_data[p]['good_volume'] = avg_good
                     for p in good_planets:
                         diff = planet_data[p]['good_volume'] - original_goods[p]
+                        others = [q for q in good_planets if q != p]
                         if diff > 0:
-                            for loser in losers:
-                                proportion = (original_goods[loser] - avg_good) / total_loss if total_loss > 0 else 0
-                                add_from = diff * proportion
-                                consumed_notes[p]['good'].append(f"{add_from:.2f} from {loser}")
+                            consumed_notes[p]['good'].append(f"{diff:.2f} from exchange with {', '.join(others)}")
                         elif diff < 0:
-                            consumed_notes[p]['good'].append(f"{diff:.2f} to group")
+                            consumed_notes[p]['good'].append(f"{diff:.2f} to exchange with {', '.join(others)}")
             # For good planets that lost good, share back based on degree gap
             lost_good_planets = [p for p in house_planets if planet_data[p]['bad_volume'] == 0 and planet_data[p]['good_volume'] < planet_data[p]['volume'] * (good_capacity_dict.get(p, 100) / 100)]
             for lost in lost_good_planets:
