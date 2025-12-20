@@ -265,11 +265,10 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                     mix = mix_dict.get(min(deg_diff, 22), 0) / 100.0
                     available_grab = planet_data[grabbed]['good_volume'] * mix
                     room = planet_data[grabber]['cap_good'] - planet_data[grabber]['good_volume']
-                    grab_amount = min(available_grab, room, planet_data[grabber]['bad_volume'])
+                    grab_amount = min(available_grab, room)
                     if grab_amount > 0:
                         planet_data[grabbed]['good_volume'] -= grab_amount
                         planet_data[grabber]['good_volume'] += grab_amount
-                        planet_data[grabber]['bad_volume'] -= grab_amount
                         consumed_notes[grabber]['good'].append(f"{grab_amount:.2f} from {grabbed}")
                         consumed_notes[grabbed]['good'].append(f"{-grab_amount:.2f} to {grabber}")
             # For Ketu exchange bad in full
