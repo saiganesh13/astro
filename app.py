@@ -234,7 +234,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                 bad_capacity = bad_capacity_dict.get(planet_cap, None)
             good_volume = (volume * (good_capacity / 100.0)) if good_capacity is not None and volume != '' else ''
             bad_volume = (volume * (bad_capacity / 100.0)) if bad_capacity is not None and volume != '' else ''
-        planet_data[planet_cap] = {'sthana': sthana, 'volume': volume, 'good_volume': good_volume, 'bad_volume': bad_volume, 'dig_bala': dig_bala, 'L': L, 'sign': sign, 'nak': nak, 'pada': pada, 'ld_sl': f"{ld}/{sl}", 'additional_good': {}, 'additional_bad': {}}
+        planet_data[planet_cap] = {'sthana': sthana, 'volume': volume, 'good_volume': good_volume, 'bad_volume': bad_volume, 'dig_bala': dig_bala, 'L': L, 'sign': sign, 'nak': nak, 'pada': pada, 'ld_sl': f"{ld}/{sl}"}
         consumed_notes[planet_cap] = {'good': [], 'bad': []}
     # Adjust for conjunctions
     for h in range(1, 13):
@@ -259,7 +259,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                     grab_amount = min(available_grab, planet_data[grabber]['bad_volume'])
                     if grab_amount > 0:
                         planet_data[grabbed]['good_volume'] -= grab_amount
-                        planet_data[grabber]['additional_good'][grabbed] = planet_data[grabber]['additional_good'].get(grabbed, 0) + grab_amount
+                        planet_data[grabber]['good_volume'] += grab_amount
                         consumed_notes[grabber]['good'].append(f"{grab_amount:.2f} from {grabbed}")
                         consumed_notes[grabbed]['good'].append(f"{-grab_amount:.2f} to {grabber}")
             # For Ketu exchange bad in full
@@ -270,7 +270,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                     add_per = ketu_bad / len(grabbed_list)
                     for grabbed in grabbed_list:
                         add = add_per
-                        planet_data[grabbed]['additional_bad'][ 'Ketu'] = planet_data[grabbed]['additional_bad'].get('Ketu', 0) + add
+                        planet_data[grabbed]['bad_volume'] += add
                         consumed_notes[grabbed]['bad'].append(f"{add:.2f} from Ketu")
                         consumed_notes['Ketu']['bad'].append(f"{-add:.2f} to {grabbed}")
             # For exchange among good planets
@@ -308,16 +308,14 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     # Build rows with adjusted
     for p in ['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn','Rahu','Ketu']:
         data = planet_data[p]
-        total_good = data['good_volume'] + sum(data['additional_good'].values())
-        total_bad = data['bad_volume'] + sum(data['additional_bad'].values())
         notes = []
-        if data['additional_good']:
-            notes.append(f"Additional Good: {'; '.join(f'{v:.2f} from {k}' for k,v in data['additional_good'].items())}")
-        if data['additional_bad']:
-            notes.append(f"Additional Bad: {'; '.join(f'{v:.2f} from {k}' for k,v in data['additional_bad'].items())}")
+        if consumed_notes[p]['good']:
+            notes.append(f"Good: {'; '.join(consumed_notes[p]['good'])}")
+        if consumed_notes[p]['bad']:
+            notes.append(f"Bad: {'; '.join(consumed_notes[p]['bad'])}")
         note_str = '; '.join(notes)
-        rows.append([p, f"{data['L']:.2f}", data['sign'], data['nak'], data['pada'], data['ld_sl'], f"{data['dig_bala']}%" if data['dig_bala'] is not None else '', f"{data['sthana']}%", f"{data['volume']:.2f}" if isinstance(data['volume'], float) else '', f"{total_good:.2f}" if isinstance(total_good, float) else '', f"{total_bad:.2f}" if isinstance(total_bad, float) else '', note_str])
-    df_planets = pd.DataFrame(rows, columns=['Planet','Deg','Sign','Nakshatra','Pada','Ld/SL','Dig Bala (%)','Sthana Bala (%)','Volume','Total Good Volume','Total Bad Volume','Consumed Notes'])
+        rows.append([p, f"{data['L']:.2f}", data['sign'], data['nak'], data['pada'], data['ld_sl'], f"{data['dig_bala']}%" if data['dig_bala'] is not None else '', f"{data['sthana']}%", f"{data['volume']:.2f}" if isinstance(data['volume'], float) else '', f"{data['good_volume']:.2f}" if isinstance(data['good_volume'], float) else '', f"{data['bad_volume']:.2f}" if isinstance(data['bad_volume'], float) else '', note_str])
+    df_planets = pd.DataFrame(rows, columns=['Planet','Deg','Sign','Nakshatra','Pada','Ld/SL','Dig Bala (%)','Sthana Bala (%)','Volume','Good Volume','Bad Volume','Consumed Notes'])
     # df_rasi
     df_rasi = pd.DataFrame([[f"House {h}", get_sign((lagna_sid+(h-1)*30)%360),
                              ', '.join(sorted(house_planets_rasi[h])) if house_planets_rasi[h] else 'Empty']
