@@ -218,13 +218,9 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         if planet_cap == 'Rahu':
             good_volume = 0.0
             bad_volume = volume
-            cap_good = 0
-            cap_bad = volume
         elif planet_cap == 'Ketu':
             good_volume = 50.0
             bad_volume = 0.0
-            cap_good = 50.0
-            cap_bad = 0.0
         else:
             if planet_cap == 'Moon':
                 if paksha == 'Shukla':
@@ -238,9 +234,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                 bad_capacity = bad_capacity_dict.get(planet_cap, None)
             good_volume = (volume * (good_capacity / 100.0)) if good_capacity is not None and volume != '' else ''
             bad_volume = (volume * (bad_capacity / 100.0)) if bad_capacity is not None and volume != '' else ''
-            cap_good = volume
-            cap_bad = volume
-        planet_data[planet_cap] = {'sthana': sthana, 'volume': volume, 'good_volume': good_volume, 'bad_volume': bad_volume, 'cap_good': cap_good, 'cap_bad': cap_bad, 'dig_bala': dig_bala, 'L': L, 'sign': sign, 'nak': nak, 'pada': pada, 'ld_sl': f"{ld}/{sl}"}
+        planet_data[planet_cap] = {'sthana': sthana, 'volume': volume, 'good_volume': good_volume, 'bad_volume': bad_volume, 'dig_bala': dig_bala, 'L': L, 'sign': sign, 'nak': nak, 'pada': pada, 'ld_sl': f"{ld}/{sl}", 'additional_good': 0.0, 'additional_bad': 0.0}
         consumed_notes[planet_cap] = {'good': [], 'bad': []}
     # Adjust for conjunctions
     for h in range(1, 13):
@@ -250,8 +244,6 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
             if 'Ketu' in house_planets and ('Sun' in house_planets or 'Moon' in house_planets):
                 planet_data['Ketu']['bad_volume'] = planet_data['Ketu']['volume']
                 planet_data['Ketu']['good_volume'] = 0.0
-                planet_data['Ketu']['cap_good'] = 0.0
-                planet_data['Ketu']['cap_bad'] = planet_data['Ketu']['volume']
             # General grab for any with bad_volume >0
             general_grabbers = [p for p in house_planets if planet_data[p]['bad_volume'] > 0]
             general_grabbers.sort(key=lambda p: -order_dict.get(p, 0))  # higher order first
@@ -264,11 +256,10 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                     deg_diff = int(abs(planet_data[grabber]['L'] - planet_data[grabbed]['L']))
                     mix = mix_dict.get(min(deg_diff, 22), 0) / 100.0
                     available_grab = planet_data[grabbed]['good_volume'] * mix
-                    room = planet_data[grabber]['cap_good'] - planet_data[grabber]['good_volume']
-                    grab_amount = min(available_grab, room)
+                    grab_amount = min(available_grab, planet_data[grabber]['bad_volume'])
                     if grab_amount > 0:
                         planet_data[grabbed]['good_volume'] -= grab_amount
-                        planet_data[grabber]['good_volume'] += grab_amount
+                        planet_data[grabber]['additional_good'] += grab_amount
                         consumed_notes[grabber]['good'].append(f"{grab_amount:.2f} from {grabbed}")
                         consumed_notes[grabbed]['good'].append(f"{-grab_amount:.2f} to {grabber}")
             # For Ketu exchange bad in full
@@ -278,10 +269,8 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                 if grabbed_list:
                     add_per = ketu_bad / len(grabbed_list)
                     for grabbed in grabbed_list:
-                        room_bad = planet_data[grabbed]['cap_bad'] - planet_data[grabbed]['bad_volume']
-                        add = min(add_per, room_bad)
-                        planet_data[grabbed]['bad_volume'] += add
-                        planet_data['Ketu']['bad_volume'] -= add
+                        add = add_per
+                        planet_data[grabbed]['additional_bad'] += add
                         consumed_notes[grabbed]['bad'].append(f"{add:.2f} from Ketu")
                         consumed_notes['Ketu']['bad'].append(f"{-add:.2f} to {grabbed}")
             # For exchange among good planets
