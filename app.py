@@ -259,7 +259,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                     grab_amount = min(available_grab, planet_data[grabber]['bad_volume'])
                     if grab_amount > 0:
                         planet_data[grabbed]['good_volume'] -= grab_amount
-                        planet_data[grabber]['good_volume'] += grab_amount
+                        planet_data[grabber]['good_volume'] = min(planet_data[grabber]['good_volume'] + grab_amount, planet_data[grabber]['volume'])
                         consumed_notes[grabber]['good'].append(f"{grab_amount:.2f} from {grabbed}")
                         consumed_notes[grabbed]['good'].append(f"{-grab_amount:.2f} to {grabber}")
             # For Ketu exchange bad in full
@@ -270,7 +270,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                     add_per = ketu_bad / len(grabbed_list)
                     for grabbed in grabbed_list:
                         add = add_per
-                        planet_data[grabbed]['bad_volume'] += add
+                        planet_data[grabbed]['bad_volume'] = min(planet_data[grabbed]['bad_volume'] + add, planet_data[grabbed]['volume'])
                         consumed_notes[grabbed]['bad'].append(f"{add:.2f} from Ketu")
                         consumed_notes['Ketu']['bad'].append(f"{-add:.2f} to {grabbed}")
             # For exchange among good planets
