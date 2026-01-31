@@ -64,41 +64,28 @@ krishna_bad = [7, 14, 21, 28, 35, 42, 49, 56, 63, 70, 77, 84, 91, 98, 100]
 order_dict = {'Jupiter':1, 'Venus':2, 'Mercury':3, 'Sun':4, 'Mars':5, 'Saturn':6, 'Rahu':7, 'Ketu':8}
 mix_dict = {0:100,1:100,2:100,3:95,4:90,5:85,6:80,7:75,8:70,9:65,10:60,11:55,12:50,13:45,14:40,15:35,16:30,17:25,18:20,19:15,20:10,21:5,22:0}
 
-#  Only this function is changed
-# ────────────────────────────────────────────────
 def get_lahiri_ayanamsa(year):
     """
-    Lahiri (Chitra Paksha) ayanamsa tuned to match the most common values used
-    in Indian astrology software (JHora, AstroSage, Parashara, etc.)
-
-    Reference points it tries to hit very closely:
-      1900.0 →  22°27'38" ≈ 22.46056°
-      1950.0 →  23°09'31" ≈ 23.15861°
-      2000.0 →  23°51'11" ≈ 23.85306°
-      2025.0 → ~24°11'30" 
-
-    Uses linear + small quadratic term.
+    Standard Lahiri (Chitrapaksha) ayanamsa - matches mainstream values
+    Base for J2000.0 ≈ 23°51'11" = 23.8530556°
+    Rate ≈ 50.2564 "/year (close to historical Newcomb/IAU used in Lahiri)
+    Small quadratic term for better century-scale fit
     """
-    # Years from J2000.0
     t = year - 2000.0
-
-    # Base value at 2000.0 (very standard Lahiri value)
-    base_deg = 23 + 51/60.0 + 11/3600.0     # 23.8530555556°
-
-    # Precession rate in arcseconds per year — very close to what JHora uses
-    rate_arcsec_per_year = 50.2388475
-
-    # Very small quadratic term to improve fit over long periods
-    quad_arcsec = 0.000111 * t * t
-
-    # Total ayanamsa in arcseconds
-    ayan_arcsec = rate_arcsec_per_year * t + quad_arcsec
-
-    # Convert to degrees
-    ayan_deg = ayan_arcsec / 3600.0
-
+    
+    # Base at J2000.0 in degrees (most accepted value)
+    base_deg = 23 + 51/60.0 + 11/3600.0  # 23.8530555556
+    
+    # Precession rate in arcseconds per year
+    rate = 50.2564
+    
+    # Very small quadratic term (helps over long periods)
+    quadratic = 0.000111 * t * t  # in arcseconds
+    
+    ayan_sec = rate * t + quadratic
+    ayan_deg = ayan_sec / 3600.0
+    
     return (base_deg + ayan_deg) % 360
-
 def get_obliquity(d):
     """Mean obliquity of the ecliptic - unchanged, already accurate"""
     T = d/36525.0
