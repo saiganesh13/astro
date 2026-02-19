@@ -470,13 +470,19 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
             house_lord = get_sign_lord(sign)
             house_lord_status = planet_status_map.get(house_lord, '-')
             
-            if house_lord_status in ['Uchcham', 'Moolathirigonam']:
+            if house_lord_status in ['Uchcham', 'Moolathirigonam', 'Aatchi']:
                 updated_status = 'Neechabhangam'
                 is_neechabhangam = True
                 
                 nb_base_vol = capacity * 0.40
-                neechabhangam_good_add = nb_base_vol * (good_pct / 100.0)
-                neechabhangam_bad_add = nb_base_vol * (bad_pct / 100.0)
+                
+                if planet_cap in ['Saturn', 'Mars']:
+                    # Refill with 100% Good currency and reduce debt equivalently
+                    neechabhangam_good_add = nb_base_vol
+                    neechabhangam_bad_add = 0.0
+                else:
+                    neechabhangam_good_add = nb_base_vol * (good_pct / 100.0)
+                    neechabhangam_bad_add = nb_base_vol * (bad_pct / 100.0)
                 
                 good_val += neechabhangam_good_add
                 bad_val += neechabhangam_bad_add
@@ -502,6 +508,10 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                 if capacity is not None:
                     total_debt = -((1.2 * capacity) - good_val)
                     has_debt = True
+            
+            # For Saturn/Mars Neechabhangam: explicitly reduce debt by Good currency added
+            if is_neechabhangam and planet_cap in ['Saturn', 'Mars']:
+                total_debt += neechabhangam_good_add
                     
         else:
             if bad_val > 0:
@@ -515,12 +525,18 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         
         currency_parts = []
         if planet_cap in single_currency_planets:
-            total_val = good_val + bad_val
-            if total_val > 0:
-                if planet_cap in bad_currency_planets:
-                    currency_parts.append(f"Bad {planet_cap}[{total_val:.2f}]")
-                else:
-                    currency_parts.append(f"{planet_cap}[{total_val:.2f}]")
+            if planet_cap in ['Saturn', 'Mars'] and is_neechabhangam and good_val > 0:
+                # Neechabhangam: show Good and Bad separately
+                currency_parts.append(f"Good {planet_cap}[{good_val:.2f}]")
+                if bad_val > 0:
+                    currency_parts.append(f"Bad {planet_cap}[{bad_val:.2f}]")
+            else:
+                total_val = good_val + bad_val
+                if total_val > 0:
+                    if planet_cap in bad_currency_planets:
+                        currency_parts.append(f"Bad {planet_cap}[{total_val:.2f}]")
+                    else:
+                        currency_parts.append(f"{planet_cap}[{total_val:.2f}]")
         else:
             if good_val > 0:
                 currency_parts.append(f"Good {planet_cap}[{good_val:.2f}]")
@@ -546,6 +562,8 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         if planet_cap in ['Jupiter', 'Venus', 'Mercury']:
             if good_val > 0: planet_data[planet_cap]['final_inventory'][planet_cap] = good_val
         elif planet_cap in ['Saturn', 'Rahu']:
+            if is_neechabhangam and good_val > 0:
+                planet_data[planet_cap]['final_inventory'][f"Good {planet_cap}"] = good_val
             if bad_val > 0: planet_data[planet_cap]['final_inventory'][f"Bad {planet_cap}"] = bad_val
         elif planet_cap == 'Ketu':
             if good_val > 0: planet_data[planet_cap]['final_inventory'][f"Good {planet_cap}"] = good_val
@@ -571,39 +589,22 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         planet_data['Mars']['default_currency'] = f"Good Mars[{_mars_total:.2f}]"
         planet_data['Mars']['debt'] = "0.00"
 
-    # Saturn in Taurus: switches from -100% malefic to -50 malefic and +50 benefic (Good Venus)
+    # Saturn in Taurus: switches from -100% malefic to -50 malefic and +50 benefic (Good Saturn)
     if planet_data['Saturn']['sign'] == 'Taurus':
         _saturn_bad = planet_data['Saturn']['final_inventory'].get('Bad Saturn', 0.0)
-        # Split: 50% stays as Bad Saturn, 50% becomes Venus (benefic)
+        # Split: 50% stays as Bad Saturn, 50% becomes Good Saturn (benefic)
         new_bad_saturn = _saturn_bad * 0.50
-        new_good_venus = _saturn_bad * 0.50
+        new_good_saturn = _saturn_bad * 0.50
         planet_data['Saturn']['final_inventory']['Bad Saturn'] = new_bad_saturn
-        planet_data['Saturn']['final_inventory']['Venus'] = new_good_venus
-        # Update debt to equal the new bad currency
-        planet_data['Saturn']['current_debt'] = -new_bad_saturn if new_bad_saturn > 0 else 0.0
+        planet_data['Saturn']['final_inventory']['Good Saturn'] = new_good_saturn
+        # Update debt: Good Saturn reduces the debt
+        planet_data['Saturn']['current_debt'] = (-new_bad_saturn + new_good_saturn) if new_bad_saturn > 0 else 0.0
         # Update display strings
         saturn_parts = []
-        if new_good_venus > 0: saturn_parts.append(f"Good Venus[{new_good_venus:.2f}]")
+        if new_good_saturn > 0: saturn_parts.append(f"Good Saturn[{new_good_saturn:.2f}]")
         if new_bad_saturn > 0: saturn_parts.append(f"Bad Saturn[{new_bad_saturn:.2f}]")
         planet_data['Saturn']['default_currency'] = ", ".join(saturn_parts)
         planet_data['Saturn']['debt'] = f"{planet_data['Saturn']['current_debt']:.2f}"
-
-    # Rahu in Taurus: switches from -100% malefic to -50 malefic and +50 benefic (Venus currency)
-    if planet_data['Rahu']['sign'] == 'Taurus':
-        _rahu_bad = planet_data['Rahu']['final_inventory'].get('Bad Rahu', 0.0)
-        # Split: 50% stays as Bad Rahu, 50% becomes Venus (benefic)
-        new_bad_rahu = _rahu_bad * 0.50
-        new_good_venus = _rahu_bad * 0.50
-        planet_data['Rahu']['final_inventory']['Bad Rahu'] = new_bad_rahu
-        planet_data['Rahu']['final_inventory']['Venus'] = new_good_venus
-        # Update debt to equal the new bad currency
-        planet_data['Rahu']['current_debt'] = -new_bad_rahu if new_bad_rahu > 0 else 0.0
-        # Update display strings
-        rahu_parts = []
-        if new_good_venus > 0: rahu_parts.append(f"Good Venus[{new_good_venus:.2f}]")
-        if new_bad_rahu > 0: rahu_parts.append(f"Bad Rahu[{new_bad_rahu:.2f}]")
-        planet_data['Rahu']['default_currency'] = ", ".join(rahu_parts)
-        planet_data['Rahu']['debt'] = f"{planet_data['Rahu']['current_debt']:.2f}"
 
     for p in ['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn','Rahu','Ketu']:
         data = planet_data[p]
@@ -633,7 +634,8 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         planet_cap = p.capitalize()
         navamsa_house_planets[nav_house].append(planet_cap)
         
-        nav_volume = planet_data[planet_cap]['volume']
+        # Use 100% sthanabala for Navamsa (full capacity as volume)
+        nav_volume = capacity_dict.get(planet_cap, 0)
         
         if planet_cap == 'Moon':
             if paksha == 'Shukla':
@@ -753,6 +755,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         if c_key == 'Good Mars': return 800 
         if c_key == 'Good Sun': return 700 
         if c_key == 'Good Ketu': return 700
+        if c_key == 'Good Rahu': return 100
         if p_name == 'Moon' and 'Bad' in c_key:
             pct = navamsa_data['Moon']['nav_moon_bad_pct']
             return 400 - (pct * 3)
@@ -802,6 +805,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                 
                 inv = navamsa_data[t_name]['nav_inventory']
                 for key, val in inv.items():
+                    if key == 'Good Rahu': continue
                     if val > 0.001:
                         max_pull = navamsa_data[t_name]['nav_volume'] * 1.0
                         tracker_key = f"nav_pulled_from_{t_name}"
@@ -852,6 +856,12 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                         navamsa_data[debtor]['nav_gained_currencies']['Good Ketu'] += take
                         navamsa_data[debtor]['nav_current_debt'] += take
                         navamsa_data[debtor]['nav_debt'] += take
+                    elif debtor == 'Rahu' and tgt['planet'] == 'Saturn' and tgt['key'] == 'Good Saturn':
+                        # Rahu converts Good Saturn to Bad Saturn and adds debt
+                        navamsa_data[debtor]['nav_inventory']['Bad Saturn'] += take
+                        navamsa_data[debtor]['nav_gained_currencies']['Bad Saturn'] += take
+                        navamsa_data[debtor]['nav_current_debt'] -= take
+                        navamsa_data[debtor]['nav_debt'] -= take
                     else:
                         navamsa_data[debtor]['nav_inventory'][tgt['key']] += take
                         navamsa_data[debtor]['nav_gained_currencies'][tgt['key']] += take
@@ -993,6 +1003,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                 
                 inv = navamsa_phase2_data[target]['navp2_inventory']
                 for key, val in inv.items():
+                    if key == 'Good Rahu': continue
                     if 'Bad' in key: continue
                     if val > 0.001:
                         max_pull = navamsa_phase2_data[target]['nav_volume'] * 1.0
@@ -1279,6 +1290,88 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     
     df_navamsa_phase3 = pd.DataFrame(navamsa_phase3_rows, columns=['Planet', 'Inventory Carried Over', 'Gained Currencies', 'Debt [Nav Phase 3]'])
     
+    # PHASE 0 CURRENCY EXCHANGE — Rahu Modification
+    _p0_rahu_sign = planet_sign_map.get('Rahu', 'Aries')
+    _p0_rahu_house_lord = get_sign_lord(_p0_rahu_sign)
+    _p0_rahu_hl_status = planet_status_map.get(_p0_rahu_house_lord, '-')
+    _p0_asc_sign = get_sign(lagna_sid)
+    _p0_good_rahu_total = 0.0
+    _p0_rows = []
+    _p0_rahu_debt_before = planet_data['Rahu']['current_debt']
+
+    # Step 1: Score Addition based on Dispositor (House Lord) Status
+    _p0_step1 = 0.0
+    _p0_step1_note = ''
+    if _p0_rahu_hl_status == 'Uchcham':
+        _p0_step1 = 80.0
+        _p0_step1_note = f"Lord {_p0_rahu_house_lord} is Uchcham => +80 Good Rahu"
+    elif _p0_rahu_hl_status == 'Moolathirigonam':
+        _p0_step1 = 48.0
+        _p0_step1_note = f"Lord {_p0_rahu_house_lord} is Moolathirigonam => +48 Good Rahu"
+    elif _p0_rahu_hl_status == 'Aatchi':
+        _p0_step1 = 36.0
+        _p0_step1_note = f"Lord {_p0_rahu_house_lord} is Aatchi => +36 Good Rahu"
+    else:
+        _p0_step1_note = f"Lord {_p0_rahu_house_lord} status={_p0_rahu_hl_status}, no bonus"
+    _p0_good_rahu_total += _p0_step1
+    planet_data['Rahu']['current_debt'] += _p0_step1
+    _p0_rows.append(['Rahu', 'Step 1: Dispositor Status', f"{_p0_step1:.2f}", f"{planet_data['Rahu']['current_debt']:.2f}", _p0_step1_note])
+
+    # Step 2: Bonus for Favourite House
+    _p0_fav_signs = {'Aries', 'Taurus', 'Cancer', 'Virgo', 'Libra', 'Sagittarius', 'Capricorn', 'Pisces'}
+    _p0_step2 = 0.0
+    _p0_step2_note = ''
+    if _p0_rahu_sign in _p0_fav_signs:
+        _p0_step2 = 30.0
+        _p0_step2_note = f"Rahu in favourite sign {_p0_rahu_sign} => +30 Good Rahu"
+    else:
+        _p0_step2_note = f"Rahu in {_p0_rahu_sign}, not a favourite sign"
+    _p0_good_rahu_total += _p0_step2
+    planet_data['Rahu']['current_debt'] += _p0_step2
+    _p0_rows.append(['Rahu', 'Step 2: Favourite House', f"{_p0_step2:.2f}", f"{planet_data['Rahu']['current_debt']:.2f}", _p0_step2_note])
+
+    # Step 3: Bonus for Friend's House (based on Ascendant)
+    _p0_friend_list = {
+        'Aries': {'Cancer', 'Leo', 'Scorpio', 'Sagittarius', 'Pisces'},
+        'Taurus': {'Gemini', 'Virgo', 'Libra', 'Capricorn', 'Aquarius'},
+        'Gemini': {'Taurus', 'Virgo', 'Libra', 'Capricorn', 'Aquarius'},
+        'Cancer': {'Aries', 'Leo', 'Scorpio', 'Sagittarius', 'Pisces'},
+        'Leo': {'Aries', 'Cancer', 'Scorpio', 'Sagittarius', 'Pisces'},
+        'Virgo': {'Taurus', 'Gemini', 'Libra', 'Capricorn', 'Aquarius'},
+        'Libra': {'Taurus', 'Gemini', 'Virgo', 'Capricorn', 'Aquarius'},
+        'Scorpio': {'Aries', 'Cancer', 'Leo', 'Sagittarius', 'Pisces'},
+        'Sagittarius': {'Aries', 'Cancer', 'Leo', 'Scorpio', 'Pisces'},
+        'Capricorn': {'Taurus', 'Gemini', 'Virgo', 'Libra', 'Aquarius'},
+        'Aquarius': {'Taurus', 'Gemini', 'Virgo', 'Libra', 'Capricorn'},
+        'Pisces': {'Aries', 'Cancer', 'Leo', 'Scorpio', 'Sagittarius'},
+    }
+    _p0_step3 = 0.0
+    _p0_step3_note = ''
+    _p0_friends = _p0_friend_list.get(_p0_asc_sign, set())
+    if _p0_rahu_sign in _p0_friends:
+        _p0_step3 = 30.0
+        _p0_step3_note = f"Rahu in {_p0_rahu_sign}, friend of lagna {_p0_asc_sign} => +30 Good Rahu"
+    else:
+        _p0_step3_note = f"Rahu in {_p0_rahu_sign}, not friend of lagna {_p0_asc_sign}"
+    _p0_good_rahu_total += _p0_step3
+    planet_data['Rahu']['current_debt'] += _p0_step3
+    _p0_rows.append(['Rahu', 'Step 3: Friend of Lagna', f"{_p0_step3:.2f}", f"{planet_data['Rahu']['current_debt']:.2f}", _p0_step3_note])
+
+    # Apply Good Rahu to Rahu's inventory
+    if _p0_good_rahu_total > 0:
+        planet_data['Rahu']['final_inventory']['Good Rahu'] = planet_data['Rahu']['final_inventory'].get('Good Rahu', 0.0) + _p0_good_rahu_total
+        # Recalculate display strings
+        _p0_currency_parts = []
+        _p0_inv = planet_data['Rahu']['final_inventory']
+        for _p0k, _p0v in _p0_inv.items():
+            if _p0v > 0.001:
+                _p0_currency_parts.append(f"{_p0k}[{_p0v:.2f}]")
+        planet_data['Rahu']['default_currency'] = ", ".join(_p0_currency_parts)
+        _p0_debt = planet_data['Rahu']['current_debt']
+        planet_data['Rahu']['debt'] = f"{_p0_debt:.2f}" if _p0_debt < -0.001 else '0.00'
+
+    df_phase0 = pd.DataFrame(_p0_rows, columns=['Planet', 'Step', 'Good Rahu Added', 'Debt After', 'Notes'])
+
     # PHASE 1 CURRENCY EXCHANGE LOGIC (Rasi Chart)
     debtor_rank = []
     debtor_rank.append('Rahu')
@@ -1325,6 +1418,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         if c_key == 'Good Mars': return 800 
         if c_key == 'Good Sun': return 700 
         if c_key == 'Good Ketu': return 700
+        if c_key == 'Good Rahu': return 100
         if p_name == 'Moon' and 'Bad' in c_key:
             pct = planet_data['Moon']['moon_bad_pct']
             return 400 - (pct * 3)
@@ -1358,6 +1452,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                 
                 inv = planet_data[t_name]['final_inventory']
                 for key, val in inv.items():
+                    if key == 'Good Rahu': continue
                     if val > 0.001:
                         L1 = planet_data[debtor]['L']
                         L2 = planet_data[t_name]['L']
@@ -1418,6 +1513,10 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                     if is_ketu_currency and not is_sun_or_moon:
                         planet_data[debtor]['final_inventory']['Good Ketu'] += take
                         planet_data[debtor]['current_debt'] += take
+                    elif debtor == 'Rahu' and tgt['planet'] == 'Saturn' and tgt['key'] == 'Good Saturn':
+                        # Rahu converts Good Saturn to Bad Saturn and adds debt
+                        planet_data[debtor]['final_inventory']['Bad Saturn'] += take
+                        planet_data[debtor]['current_debt'] -= take
                     else:
                         planet_data[debtor]['final_inventory'][tgt['key']] += take
                         
@@ -1444,6 +1543,8 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                     if debtor_is_malefic and _tgt_is_malefic:
                         _infection_key = f"Bad {debtor}" if debtor != 'Moon' else "Bad Moon"
                         planet_data[_tgt_name]['final_inventory'][_infection_key] += take
+                        # Infection adds Bad Currency => Debt Increases
+                        planet_data[_tgt_name]['current_debt'] -= take
                     
                     good_available = any(t['is_good'] and planet_data[t['planet']]['final_inventory'].get(t['key'], 0) > 0 for t in potential_targets)
 
@@ -1557,6 +1658,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                 
                 inv = phase2_data[target]['p2_inventory']
                 for key, val in inv.items():
+                    if key == 'Good Rahu': continue
                     if 'Bad' in key: continue
                     if val > 0.001:
                         cap_pct = mix_dict.get(gap, 0)
@@ -1644,11 +1746,11 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         
         for k, v in navp3_gained.items():
             if v > 0.001:
-                add_amount = v * 0.10
+                add_amount = v * 0.20
                 phase3_data[p]['p3_inventory'][k] += add_amount
         
         navp3_debt = navamsa_phase3_data[p]['navp3_debt']
-        phase3_data[p]['p3_current_debt'] += navp3_debt * 0.10
+        phase3_data[p]['p3_current_debt'] += navp3_debt * 0.20
     
     planets_in_house_11 = []
     for p in ['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn','Rahu','Ketu']:
@@ -1939,6 +2041,13 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
             if 'Bad' in k:
                 phase5_data[p]['bad_inv'] += v
     
+    # Snapshot inventories & debts BEFORE any exchange, so all clones are created simultaneously
+    _p5_snapshot_inv = {}
+    _p5_snapshot_debt = {}
+    for _sp in ['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn','Rahu','Ketu']:
+        _p5_snapshot_inv[_sp] = dict(phase5_data[_sp]['p5_inventory'])
+        _p5_snapshot_debt[_sp] = phase5_data[_sp]['p5_current_debt']
+
     P5_STANDARD_MALEFICS = ['Saturn', 'Mars', 'Sun', 'Rahu', 'Ketu']
     P5_STANDARD_BENEFICS = ['Jupiter', 'Venus', 'Mercury']
     
@@ -1980,7 +2089,12 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     
     PLANET_SEQUENCE = ['Saturn', 'Mars', 'Jupiter', 'Venus', 'Mercury', 'Moon']
     _jp_poison_notes = []  # Jupiter Poison diagnostic notes (initialized before loop)
-    
+    all_planet_clones = {}  # stores clones per planet, created simultaneously
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # PASS 1: CREATE ALL VIRTUAL CLONES SIMULTANEOUSLY (from snapshot)
+    # All planets read the same pre-exchange baseline so creation is simultaneous.
+    # ═══════════════════════════════════════════════════════════════════════
     for current_planet in PLANET_SEQUENCE:
         if current_planet not in ASPECT_RULES:
             continue
@@ -1988,7 +2102,8 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         aspect_offsets = ASPECT_RULES[current_planet]
         parent_data = phase5_data[current_planet]
         parent_L = parent_data['L']
-        parent_debt = parent_data['p5_current_debt']
+        # Read debt from snapshot so clone debt is not affected by prior exchanges
+        parent_debt = _p5_snapshot_debt[current_planet]
 
         # Local scaling for Malefic Neecham/Neechabhangam planets (applied to clones only)
         _cp_is_malefic = (
@@ -2001,12 +2116,13 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         else:
             scaling_factor = 1.0
         
-        # Part A: Clone Creation
+        # Part A: Clone Creation (reads from snapshot inventory)
         clones = []
         
         for offset, aspect_pct in aspect_offsets.items():
             clone_L = (parent_L + (offset - 1) * 30) % 360
-            parent_inv = parent_data['p5_inventory']
+            # Read from snapshot so all clones see the same pre-exchange state
+            parent_inv = _p5_snapshot_inv[current_planet]
             
             clone_inventory = defaultdict(float)
             clone_debt = 0.0
@@ -2022,7 +2138,13 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                 if clone_value > 0.001:
                     clone_inventory['Good Saturn'] = clone_value
                 
-                clone_debt = parent_debt * aspect_pct * scaling_factor
+                # Neecha/Neechabhangam Saturn: debt = net(Good - Bad) from parent snapshot
+                if _cp_status in ('Neecham', 'Neechabhangam', 'Neechabhanga Raja Yoga'):
+                    _sat_good_total = sum(v for k, v in parent_inv.items() if is_good_currency(k) and v > 0.001)
+                    _sat_bad_total = sum(v for k, v in parent_inv.items() if 'Bad' in k and v > 0.001)
+                    clone_debt = (_sat_good_total - _sat_bad_total) * aspect_pct * scaling_factor
+                else:
+                    clone_debt = parent_debt * aspect_pct * scaling_factor
                 clone_type = 'Active'
                 
             elif current_planet == 'Mars':
@@ -2038,7 +2160,13 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                 if clone_value > 0.001:
                     clone_inventory['Good Mars'] = clone_value
                 
-                clone_debt = parent_debt * aspect_pct * scaling_factor
+                # Neecha/Neechabhangam Mars: debt = net(Good - Bad) from parent snapshot
+                if _cp_status in ('Neecham', 'Neechabhangam', 'Neechabhanga Raja Yoga'):
+                    _mars_good_total = sum(v for k, v in parent_inv.items() if is_good_currency(k) and v > 0.001)
+                    _mars_bad_total = sum(v for k, v in parent_inv.items() if 'Bad' in k and v > 0.001)
+                    clone_debt = (_mars_good_total - _mars_bad_total) * aspect_pct * scaling_factor
+                else:
+                    clone_debt = parent_debt * aspect_pct * scaling_factor
                 clone_type = 'Active'
                 
             elif current_planet in ['Jupiter', 'Venus', 'Mercury']:
@@ -2088,6 +2216,18 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
             clones.append(clone)
             all_initial_clones.append({'parent': current_planet, 'offset': offset, 'L': clone_L})
         
+        all_planet_clones[current_planet] = clones
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # PASS 2: CURRENCY EXCHANGE (sequential, in original PLANET_SEQUENCE order)
+    # Jupiter Poison + Interaction Cycle + Logging, using the pre-created clones.
+    # ═══════════════════════════════════════════════════════════════════════
+    for current_planet in PLANET_SEQUENCE:
+        if current_planet not in ASPECT_RULES:
+            continue
+
+        clones = all_planet_clones[current_planet]
+
         # ---- JUPITER POISON LOGIC (applied before interaction cycle) ----
         if current_planet == 'Jupiter':
             _jp_sign = planet_sign_map.get('Jupiter', '')
@@ -2315,6 +2455,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                         good_currencies = []
                         bad_currencies = []
                         for k, v in target_inv.items():
+                            if k == 'Good Rahu': continue
                             if v > 0.001 and k != banned_currency:
                                 score = get_p5_currency_rank_score(k)
                                 if is_good_currency(k):
@@ -2435,6 +2576,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                         
                         available_currencies = []
                         for k, orig_v in clone['original_inventory'].items():
+                            if k == 'Good Rahu': continue
                             taken_key = f'taken_from_original_{k}'
                             taken = clone.get(taken_key, 0.0)
                             remaining_original = orig_v - taken
@@ -2519,6 +2661,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                         
                         available_currencies = []
                         for k, orig_v in clone['original_inventory'].items():
+                            if k == 'Good Rahu': continue
                             taken_key = f'taken_from_original_{k}'
                             taken = clone.get(taken_key, 0.0)
                             remaining_original = orig_v - taken
@@ -2926,8 +3069,6 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
 
     for s in sign_names:
         for occ in sign_occupants.get(s, []):
-            if occ == 'Rahu':
-                continue  # Rahu uses Rahu Score directly, applied after NPS calculation
             # Skip planet's occupant contribution if Kendraadhibathya Dosha is active for it
             if occ in _kad_results and s == _kad_results[occ]:
                 occupant_notes[s].append(f"{occ}(Good skipped - Kendraadhibathya Dosha)")
@@ -3183,14 +3324,20 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                          adjusted = (final_ns / 2.0) + (final_ns * (100 + _um_pct) / 100.0) / 2.0
                     else:
                          adjusted = (final_ns / 2.0) + (final_ns * (100 - _um_pct) / 100.0) / 2.0
-                    suchama = 0.0
+                    # Enemy house: give half the maraivu suchama (not for Sun)
+                    if p == 'Sun':
+                        suchama = 0.0
+                    else:
+                        suchama = 0.5 * (sthana_val / 100.0) * m_pct
 
                 # Step 1: If Digbala > 92%, add 0.5 * Sthana Balam
                 if p_dig_bala > 92:
                     suchama += 0.5 * sthana_val
 
-                # Step 2: If Saturn or Mars has Neecham, add 0.5 * Sthana Balam
-                if p in ('Saturn', 'Mars') and p_status == 'Neecham':
+                # Step 2: If planet (not Sun) has Neecham/Neechabhangam/Neechabhanga Raja Yoga, add 0.5 * Sthana Balam
+                _p_eff_status = planet_data[p].get('updated_status') or p_status
+                _neg_statuses = ('Neecham', 'Neechabhangam', 'Neechabhanga Raja Yoga')
+                if p != 'Sun' and _p_eff_status in _neg_statuses:
                     suchama += 0.5 * sthana_val
 
                 suchama_str = f"{suchama:.2f}"
@@ -3208,8 +3355,10 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                 if p_dig_bala > 92:
                     suchama += 0.5 * sthana_val
 
-                # Step 2: If Saturn or Mars has Neecham, add 0.5 * Sthana Balam
-                if p in ('Saturn', 'Mars') and p_status == 'Neecham':
+                # Step 2: If planet (not Sun) has Neecham/Neechabhangam/Neechabhanga Raja Yoga, add 0.5 * Sthana Balam
+                _p_eff_status2 = planet_data[p].get('updated_status') or p_status
+                _neg_statuses2 = ('Neecham', 'Neechabhangam', 'Neechabhanga Raja Yoga')
+                if p != 'Sun' and _p_eff_status2 in _neg_statuses2:
                     suchama += 0.5 * sthana_val
 
                 suchama_str = f"{suchama:.2f}"
@@ -3220,69 +3369,6 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
             
         # Store adjusted score for House Points Calculation
         _nps_score_dict[p + '_adjusted'] = final_adjusted_score
-
-        # ---- RAHU SCORE CALCULATION ----
-        if p == 'Rahu':
-            _rahu_total_bad_p5 = total_bad  # total Bad currency including self bad from phase 5
-            _rahu_notes_parts = []
-
-            # Step 1: Quantise Maraivu Adjusted Score to 80
-            _rahu_base = (final_adjusted_score / 100.0) * 80
-            _rahu_total = _rahu_base
-            _rahu_notes_parts.append(f"Step1: ({final_adjusted_score:.2f}/100)*80={_rahu_base:.2f}")
-
-            # Step 2: Adding score based on house lord status
-            _rahu_sign = planet_sign_map.get('Rahu', 'Aries')
-            _rahu_house_lord = get_sign_lord(_rahu_sign)
-            _rahu_hl_status = planet_status_map.get(_rahu_house_lord, '-')
-            if _rahu_hl_status == 'Uchcham':
-                _rahu_total += 60
-                _rahu_notes_parts.append(f"Step2: Lord {_rahu_house_lord} Uchcham +60")
-            elif _rahu_hl_status == 'Moolathirigonam':
-                _rahu_total += 48
-                _rahu_notes_parts.append(f"Step2: Lord {_rahu_house_lord} Moolathirigonam +48")
-            elif _rahu_hl_status == 'Aatchi':
-                _rahu_total += 36
-                _rahu_notes_parts.append(f"Step2: Lord {_rahu_house_lord} Aatchi +36")
-            else:
-                _rahu_notes_parts.append(f"Step2: Lord {_rahu_house_lord} status={_rahu_hl_status}, no bonus")
-
-            # Step 3: Bonus if Rahu is in its favourite house
-            _rahu_fav_signs = {'Aries', 'Taurus', 'Cancer', 'Virgo', 'Libra', 'Sagittarius', 'Capricorn', 'Pisces'}
-            if _rahu_sign in _rahu_fav_signs:
-                _rahu_total += 10
-                _rahu_notes_parts.append(f"Step3: Fav house {_rahu_sign} +10")
-            else:
-                _rahu_notes_parts.append(f"Step3: {_rahu_sign} not fav, no bonus")
-
-            # Step 4: Bonus if Rahu is in friend's house for ascendant lagna
-            _rahu_friend_list = {
-                'Aries': {'Cancer', 'Leo', 'Scorpio', 'Sagittarius', 'Pisces'},
-                'Taurus': {'Gemini', 'Virgo', 'Libra', 'Capricorn', 'Aquarius'},
-                'Gemini': {'Taurus', 'Virgo', 'Libra', 'Capricorn', 'Aquarius'},
-                'Cancer': {'Aries', 'Leo', 'Scorpio', 'Sagittarius', 'Pisces'},
-                'Leo': {'Aries', 'Cancer', 'Scorpio', 'Sagittarius', 'Pisces'},
-                'Virgo': {'Taurus', 'Gemini', 'Libra', 'Capricorn', 'Aquarius'},
-                'Libra': {'Taurus', 'Gemini', 'Virgo', 'Capricorn', 'Aquarius'},
-                'Scorpio': {'Aries', 'Cancer', 'Leo', 'Sagittarius', 'Pisces'},
-                'Sagittarius': {'Aries', 'Cancer', 'Leo', 'Scorpio', 'Pisces'},
-                'Capricorn': {'Taurus', 'Gemini', 'Virgo', 'Libra', 'Aquarius'},
-                'Aquarius': {'Taurus', 'Gemini', 'Virgo', 'Libra', 'Capricorn'},
-                'Pisces': {'Aries', 'Cancer', 'Leo', 'Scorpio', 'Sagittarius'},
-            }
-            _rahu_asc_sign = get_sign(lagna_sid)
-            _rahu_friends = _rahu_friend_list.get(_rahu_asc_sign, set())
-            if _rahu_sign in _rahu_friends:
-                _rahu_total += 30
-                _rahu_notes_parts.append(f"Step4: {_rahu_sign} friend of lagna {_rahu_asc_sign} +30")
-            else:
-                _rahu_notes_parts.append(f"Step4: {_rahu_sign} not friend of lagna {_rahu_asc_sign}, no bonus")
-
-            rahu_score_str = f"{_rahu_total:.2f}"
-            rahu_notes_str = " | ".join(_rahu_notes_parts)
-        else:
-            rahu_score_str = "-"
-            rahu_notes_str = "-"
 
         # ---- PLANET HAPPINESS SCORE (Naisargika Graha Maitri) ----
         _hap_score = 0
@@ -3343,10 +3429,17 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                 _cur_pct_parts.append(f"{_ck}({_cpct:.1f}%)")
         _cur_pct_str = ", ".join(_cur_pct_parts) if _cur_pct_parts else "-"
 
-        nps_rows.append([p, f"{net_score:.2f}", f"{self_bad:.2f}", formula_type, f"{final_ns:.2f}", f"{_ns_without_khs:.2f}", _cur_pct_str, m_pct_str, adjusted_str, suchama_str, rahu_score_str, rahu_notes_str, _hap_score_str, _hap_notes_str])
+        nps_rows.append([p, f"{net_score:.2f}", f"{self_bad:.2f}", formula_type, f"{final_ns:.2f}", f"{_ns_without_khs:.2f}", _cur_pct_str, m_pct_str, adjusted_str, _hap_score_str, _hap_notes_str])
 
     df_normalized_planet_scores = pd.DataFrame(nps_rows,
-        columns=['Planet', 'Net Score', 'Self Bad', 'Formula Type', 'Final Normalized Score', 'Normalised without KHS', 'Currency %', 'Maraivu %', 'Maraivu Adjusted Score', 'Suchama Score', 'Rahu Score', 'Rahu Notes', 'Happiness Score', 'Happiness Notes'])
+        columns=['Planet', 'Net Score', 'Self Bad', 'Formula Type', 'Final Normalized Score', 'Normalised without KHS', 'Currency %', 'Maraivu %', 'Maraivu Adjusted Score', 'Happiness Score', 'Happiness Notes'])
+
+    # ---- SUCHAMA SCORES TABLE ----
+    _suchama_rows = []
+    for _sp in ['Sun', 'Moon', 'Mars', 'Mercury', 'Jupiter', 'Venus', 'Saturn', 'Rahu', 'Ketu']:
+        _sv = _suchama_score_dict.get(_sp, 0.0)
+        _suchama_rows.append([_sp, f"{_sv:.2f}"])
+    df_suchama_scores = pd.DataFrame(_suchama_rows, columns=['Planet', 'Suchama Score'])
 
     # ---- NEECHAM STATUS UPGRADE BASED ON FINAL NORMALIZED SCORE ----
     for p in ['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn','Rahu','Ketu']:
@@ -3373,13 +3466,6 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                     for row in rows:
                         if row[0] == p:
                             row[11] = 'Neechabhangam'
-
-    # ---- Apply Rahu Score directly as occupant score for Rahu's house ----
-    _rahu_occ_sign = planet_sign_map.get('Rahu', 'Aries')
-    _rahu_bad_penalty = _rahu_total_bad_p5 * 0.80
-    _rahu_occupant_val = _rahu_total - _rahu_bad_penalty
-    occupant_score[_rahu_occ_sign] += _rahu_occupant_val
-    occupant_notes[_rahu_occ_sign].append(f"Rahu(RahuScore={_rahu_total:.2f} - BadPenalty={_rahu_bad_penalty:.2f} => {_rahu_occupant_val:.2f})")
 
     # ---- PLANET STRENGTHS ANALYSIS ----
     planet_strength_rows = []
@@ -3726,6 +3812,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         )
 
         for c_key, c_avail in sorted_currencies:
+            if c_key == 'Good Rahu': continue
             if sim_debt >= -0.001 or remaining_cap <= 0.001:
                 break
             needed = abs(sim_debt)
@@ -3851,6 +3938,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
 
         _nav_allowable = []
         for _nk, _nv in _nav_inv.items():
+            if _nk == 'Good Rahu': continue
             if _nv <= 0.001:
                 continue
             if _nav_is_mal:
@@ -3990,14 +4078,14 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     _ag_ll_str = _ag_ll_str_combined * 12.5 / 100.0
     _ag_h1     = _la_h1_score * 40.0 / 100.0
     _ag_lp     = _la_lagna_pt_score * 10.0 / 100.0
-    _ag_nav    = _la_nav_score * 5.0 / 100.0
+    _ag_nav    = _la_nav_score * 10.0 / 100.0
     _ag_total  = _ag_moon + _ag_ll + _ag_ll_str + _ag_h1 + _ag_lp + _ag_nav
     _ag_notes  = (f"Moon({_la_moon_score:.2f}*25%)={_ag_moon:.2f} + "
                   f"LL({_la_ll_score:.2f}*12.5%)={_ag_ll:.2f} + "
                   f"LLStr+Suchama({_la_ll_str_score:.2f}+{_la_ll_suchama_score:.2f}={_ag_ll_str_combined:.2f}*12.5%)={_ag_ll_str:.2f} + "
                   f"H1({_la_h1_score:.2f}*40%)={_ag_h1:.2f} + "
                   f"LP({_la_lagna_pt_score:.2f}*10%)={_ag_lp:.2f} + "
-                  f"NavLagna({_la_nav_score:.2f}*5%)={_ag_nav:.2f}")
+                  f"NavLagna({_la_nav_score:.2f}*10%)={_ag_nav:.2f}")
 
     # 10. Bhuvi Bonus: weighted sum (LLStr includes Suchama)
     _bv_ll_str_combined = _la_ll_str_score + _la_ll_suchama_score
@@ -4006,7 +4094,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
     _bv_ll_str = _bv_ll_str_combined * 10.0 / 100.0
     _bv_h1     = _la_h1_score * 30.0 / 100.0
     _bv_lp     = _la_lagna_pt_score * 5.0 / 100.0
-    _bv_nav    = _la_nav_score * 5.0 / 100.0
+    _bv_nav    = _la_nav_score * 10.0 / 100.0
     _bv_sun    = _la_sun_score * 10.0 / 100.0
     _bv_h9     = _la_h9_score * 10.0 / 100.0
     _bv_total  = _bv_moon + _bv_ll + _bv_ll_str + _bv_h1 + _bv_lp + _bv_nav + _bv_sun + _bv_h9
@@ -4015,7 +4103,7 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
                   f"LLStr+Suchama({_la_ll_str_score:.2f}+{_la_ll_suchama_score:.2f}={_bv_ll_str_combined:.2f}*10%)={_bv_ll_str:.2f} + "
                   f"H1({_la_h1_score:.2f}*30%)={_bv_h1:.2f} + "
                   f"LP({_la_lagna_pt_score:.2f}*5%)={_bv_lp:.2f} + "
-                  f"NavLagna({_la_nav_score:.2f}*5%)={_bv_nav:.2f} + "
+                  f"NavLagna({_la_nav_score:.2f}*10%)={_bv_nav:.2f} + "
                   f"Sun({_la_sun_score:.2f}*10%)={_bv_sun:.2f} + "
                   f"H9({_la_h9_score:.2f}*10%)={_bv_h9:.2f}")
 
@@ -4039,6 +4127,8 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         'name': name, 'df_planets': df_planets, 'df_navamsa_exchange': df_navamsa_exchange,
         'df_navamsa_phase2': df_navamsa_phase2,
         'df_navamsa_phase3': df_navamsa_phase3,
+        'df_suchama_scores': df_suchama_scores,
+        'df_phase0': df_phase0,
         'df_phase1': df_phase1, 'df_phase2': df_phase2, 'df_phase3': df_phase3, 'df_phase4': df_phase4,
         'df_phase5': df_phase5, 'df_leftover_aspects': df_leftover_aspects,
         'df_jupiter_poison_notes': df_jupiter_poison_notes,
@@ -4269,6 +4359,9 @@ def build_export_json(cd):
     # ── 6. House Bonus Points (Reserve) ──
     data['house_bonus_reserves'] = cd['df_house_reserves'].to_dict(orient='records')
 
+    # ── 6b. Currency Exchange Phase 0 (Rahu) ──
+    data['currency_exchange_phase0'] = cd['df_phase0'].to_dict(orient='records')
+
     # ── 7. Currency Exchange Phase 5 (Final) ──
     data['currency_exchange_phase5'] = cd['df_phase5'].to_dict(orient='records')
 
@@ -4329,6 +4422,12 @@ if st.session_state.chart_data:
 
     st.subheader("Navamsa Phase 3 Exchange")
     st.dataframe(cd['df_navamsa_phase3'], hide_index=True, use_container_width=True)
+
+    st.subheader("Suchama Scores")
+    st.dataframe(cd['df_suchama_scores'], hide_index=True, use_container_width=True)
+
+    st.subheader("Currency Exchange Phase 0 (Rahu)")
+    st.dataframe(cd['df_phase0'], hide_index=True, use_container_width=True)
 
     st.subheader("Currency Exchange Phase 1")
     st.dataframe(cd['df_phase1'], hide_index=True, use_container_width=True)
