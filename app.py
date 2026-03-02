@@ -3506,13 +3506,14 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
         # --- Determine case and calculate ---
         if p == 'Moon' and _nps_moon_is_waxing and not is_neecha:
             # Case A: Waxing Moon, NOT Negative Status
-            abs_debt = abs(p5_debt)
+            # debt < 0: add |debt| to denom; debt > 0: subtract debt from denom
+            abs_debt = abs(p5_debt) if p5_debt < 0 else (-p5_debt if p5_debt > 0 else 0.0)
             denom_val = total_good + abs_debt + total_bad
             if abs(denom_val) < 0.001:
                 final_ns = 0.0
             else:
                 final_ns = ((total_good - total_bad) / denom_val) * 100
-            formula_type = f"CaseA: Waxing Moon [(Good {total_good:.2f} - Bad {total_bad:.2f}) / (Good {total_good:.2f} + |Debt| {abs_debt:.2f} + Bad {total_bad:.2f})] x100 = {final_ns:.2f}"
+            formula_type = f"CaseA: Waxing Moon [(Good {total_good:.2f} - Bad {total_bad:.2f}) / (Good {total_good:.2f} + DebtAdj {abs_debt:.2f} + Bad {total_bad:.2f})] x100 = {final_ns:.2f}"
 
         elif p == 'Moon' and _nps_moon_is_waxing and is_neecha:
             # Case B: Waxing Moon, IS Negative Status
@@ -3535,40 +3536,37 @@ def compute_chart(name, date_obj, time_str, lat, lon, tz_offset, max_depth):
 
         elif is_malefic and is_neecha:
             # Case D: Neecha Malefic – debt-based formula
-            # Score = (((Capacity * 1.2) - |Remaining Debt|) / (Capacity * 1.2)) * 120
-            # Deduct self bad currency from debt before computing score (not for Rahu/Ketu)
-            _d_adj_debt = p5_debt
-            if _d_adj_debt < 0 and self_bad > 0.001 and p not in ('Rahu', 'Ketu'):
-                _d_adj_debt = min(_d_adj_debt + self_bad, 0.0)
+            # Score = (((Capacity * 1.2) + Debt) / (Capacity * 1.2)) * 120
+            # Use raw p5_debt directly (no self_bad adjustment)
             denom_val = p_capacity * 1.2
-            abs_debt = abs(_d_adj_debt) if _d_adj_debt < 0 else 0.0
             if abs(denom_val) < 0.001:
                 final_ns = 0.0
             else:
-                final_ns = ((denom_val - abs_debt) / denom_val) * 120
-            formula_type = f"CaseD: ((Cap*1.2({denom_val:.2f}) - |Debt|{abs_debt:.2f}) / Cap*1.2({denom_val:.2f})) * 120 = {final_ns:.2f}"
+                final_ns = ((denom_val + p5_debt) / denom_val) * 120
+            _debt_sign = '+' if p5_debt >= 0 else '-'
+            formula_type = f"CaseD: ((Cap*1.2({denom_val:.2f}) {_debt_sign} Debt{abs(p5_debt):.2f}) / Cap*1.2({denom_val:.2f})) * 120 = {final_ns:.2f}"
 
         elif not is_malefic and not is_neecha:
-            # Case E: Benefic, NOT Negative Status
+            # Case E: Benefic, NOT Negative Status – debt-based formula
+            # Use raw p5_debt directly (no self_bad adjustment)
             if abs(p_volume) < 0.001:
                 final_ns = 0.0
             else:
-                final_ns = (net_score / p_volume) * 100
-            formula_type = f"CaseE: (Net{net_score:.2f}/Vol{p_volume:.2f})*100"
+                final_ns = ((p_volume + p5_debt) / p_volume) * 100
+            _debt_sign = '+' if p5_debt >= 0 else '-'
+            formula_type = f"CaseE: ((Vol{p_volume:.2f} {_debt_sign} Debt{abs(p5_debt):.2f}) / Vol{p_volume:.2f}) * 100 = {final_ns:.2f}"
 
         else:
             # Case F: Standard Malefic (Not Neecha) – debt-based formula
-            # Score = ((Volume - |Remaining Debt|) / Volume) * 100
-            # Deduct self bad currency from debt before computing score (not for Rahu/Ketu)
-            _f_adj_debt = p5_debt
-            if _f_adj_debt < 0 and self_bad > 0.001 and p not in ('Rahu', 'Ketu'):
-                _f_adj_debt = min(_f_adj_debt + self_bad, 0.0)
-            abs_debt = abs(_f_adj_debt) if _f_adj_debt < 0 else 0.0
+            # If debt < 0: Score = ((Volume + debt) / Volume) * 100  → reduces score
+            # If debt > 0: Score = ((Volume + debt) / Volume) * 100  → boosts score
+            # Use raw p5_debt directly (no self_bad adjustment)
             if abs(p_volume) < 0.001:
                 final_ns = 0.0
             else:
-                final_ns = ((p_volume - abs_debt) / p_volume) * 100
-            formula_type = f"CaseF: ((Vol{p_volume:.2f} - |Debt|{abs_debt:.2f}) / Vol{p_volume:.2f}) * 100 = {final_ns:.2f}"
+                final_ns = ((p_volume + p5_debt) / p_volume) * 100
+            _debt_sign = '+' if p5_debt >= 0 else '-'
+            formula_type = f"CaseF: ((Vol{p_volume:.2f} {_debt_sign} Debt{abs(p5_debt):.2f}) / Vol{p_volume:.2f}) * 100 = {final_ns:.2f}"
 
         # KHS Calculation (Capped at 20) for NPS
         _khs_ruled = planet_ruled_signs.get(p, [])
